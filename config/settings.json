@@ -1,0 +1,6 @@
+{
+  "minChars": 450,
+  "maxChars": 1000,
+  "postingEnabled": false,
+  "schedule": "0 */3 8-23 * * *"
+}

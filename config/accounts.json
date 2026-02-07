@@ -1,0 +1,16 @@
+[
+  {
+    "id": "account_1",
+    "name": "りな",
+    "personality": "明るくお茶目、アクティブなライフスタイル",
+    "tone": "フレンドリーで絵文字多め♪",
+    "interests": ["カフェ", "ショッピング", "美容"],
+    "writingStyle": "短文でテンポよく、明るい印象",
+    "postsPerDay": 5,
+    "active": true,
+    "loginUrl": "",
+    "loginId": "",
+    "loginPassword": "",
+    "diaryUrl": ""
+  }
+]
