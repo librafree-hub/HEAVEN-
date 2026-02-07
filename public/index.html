@@ -125,7 +125,29 @@
               </div>
               <div class="form-group">
                 <label>日記投稿URL</label>
-                <input type="text" id="acc-diaryUrl" placeholder="https://d-heaven.net/diary/new">
+                <input type="text" id="acc-diaryUrl" placeholder="https://spgirl.cityheaven.net/J4KeitaiDiaryPost.php?gid=...">
+              </div>
+
+              <hr>
+              <h4>投稿オプション</h4>
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>投稿方法</label>
+                  <select id="acc-postType">
+                    <option value="diary">写メ日記</option>
+                    <option value="freepost">フリーポスト（24時間で消える）</option>
+                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>公開範囲</label>
+                  <select id="acc-visibility">
+                    <option value="public">全公開</option>
+                    <option value="mygirl">マイガール限定</option>
+                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
+                  </select>
+                </div>
               </div>
 
               <div class="form-actions">
@@ -194,6 +216,29 @@
                 <span>実際にシティヘブンに投稿する</span>
               </label>
               <small>OFFの場合、日記生成のみ行い投稿はスキップします（テストモード）</small>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>デフォルト投稿オプション</h3>
+            <small>アカウント個別に設定がない場合、この値が使われます</small>
+            <div class="form-grid" style="margin-top:12px;">
+              <div class="form-group">
+                <label>投稿方法</label>
+                <select id="set-postType">
+                  <option value="diary">写メ日記</option>
+                  <option value="freepost">フリーポスト</option>
+                  <option value="random">ランダム</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>公開範囲</label>
+                <select id="set-visibility">
+                  <option value="public">全公開</option>
+                  <option value="mygirl">マイガール限定</option>
+                  <option value="random">ランダム</option>
+                </select>
+              </div>
             </div>
           </div>
 

@@ -64,8 +64,27 @@ class Scheduler {
         return { success: true, mode: 'test', diary };
       }
 
-      console.log(`  📤 シティヘブンに投稿中...`);
-      const result = await poster.post(account, diary, image.path);
+      // 投稿オプション決定
+      const postOptions = {};
+
+      // 投稿タイプ: diary / freepost / random
+      const postTypeSetting = account.postType || settings.postType || 'diary';
+      if (postTypeSetting === 'random') {
+        postOptions.postType = Math.random() < 0.5 ? 'diary' : 'freepost';
+      } else {
+        postOptions.postType = postTypeSetting;
+      }
+
+      // 公開範囲: public / mygirl / random
+      const visibilitySetting = account.visibility || settings.visibility || 'public';
+      if (visibilitySetting === 'random') {
+        postOptions.visibility = Math.random() < 0.5 ? 'public' : 'mygirl';
+      } else {
+        postOptions.visibility = visibilitySetting;
+      }
+
+      console.log(`  📤 シティヘブンに投稿中... [${postOptions.postType === 'freepost' ? 'フリーポスト' : '写メ日記'} / ${postOptions.visibility === 'mygirl' ? 'マイガール' : '全公開'}]`);
+      const result = await poster.post(account, diary, image.path, postOptions);
 
       database.addPost({
         accountId: account.id,
@@ -74,6 +93,8 @@ class Scheduler {
         body: diary.body,
         charCount: diary.charCount,
         image: image.name,
+        postType: postOptions.postType,
+        visibility: postOptions.visibility,
         status: result.success ? 'success' : 'failed',
         message: result.error || ''
       });

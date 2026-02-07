@@ -79,7 +79,8 @@ const App = {
         <div class="account-meta">
           ${this.esc(a.personality || '')}<br>
           画像: ${a.imageStats.total}枚（残り${a.imageStats.remaining}枚）<br>
-          投稿数/日: ${a.postsPerDay}
+          投稿数/日: ${a.postsPerDay}<br>
+          ${{diary:'写メ日記',freepost:'フリーポスト',random:'ランダム'}[a.postType] || '写メ日記'} / ${{public:'全公開',mygirl:'マイガール',random:'ランダム'}[a.visibility] || '全公開'}
         </div>
         <div class="account-actions">
           <button class="btn btn-sm btn-primary" onclick="App.postSingle('${a.id}')">投稿</button>
@@ -115,6 +116,8 @@ const App = {
     document.getElementById('acc-loginId').value = a.loginId || '';
     document.getElementById('acc-loginPassword').value = a.loginPassword || '';
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
+    document.getElementById('acc-postType').value = a.postType || 'diary';
+    document.getElementById('acc-visibility').value = a.visibility || 'public';
     document.getElementById('modal-account').style.display = 'flex';
   },
 
@@ -132,6 +135,8 @@ const App = {
       loginId: document.getElementById('acc-loginId').value,
       loginPassword: document.getElementById('acc-loginPassword').value,
       diaryUrl: document.getElementById('acc-diaryUrl').value,
+      postType: document.getElementById('acc-postType').value,
+      visibility: document.getElementById('acc-visibility').value,
       active: true
     };
 
@@ -232,9 +237,12 @@ const App = {
 
     const statusLabel = { success: '成功', failed: '失敗', test: 'テスト' };
 
+    const typeLabel = { diary: '写メ日記', freepost: 'フリーポスト' };
+    const visLabel = { public: '全公開', mygirl: 'マイガール' };
+
     let html = `<table class="posts-table">
       <thead><tr>
-        <th>日時</th><th>アカウント</th><th>タイトル</th><th>文字数</th><th>状態</th>
+        <th>日時</th><th>アカウント</th><th>タイトル</th><th>文字数</th><th>種類</th><th>公開</th><th>状態</th>
       </tr></thead><tbody>`;
 
     for (const p of posts) {
@@ -244,10 +252,12 @@ const App = {
         <td>${this.esc(p.accountName || p.accountId)}</td>
         <td>${this.esc(p.title || '-')}</td>
         <td>${p.charCount || '-'}</td>
+        <td>${typeLabel[p.postType] || '-'}</td>
+        <td>${visLabel[p.visibility] || '-'}</td>
         <td class="status-${p.status}">${statusLabel[p.status] || p.status}</td>
       </tr>`;
       if (showBody && p.body) {
-        html += `<tr><td colspan="5"><div class="post-preview">${this.esc(p.body)}</div></td></tr>`;
+        html += `<tr><td colspan="7"><div class="post-preview">${this.esc(p.body)}</div></td></tr>`;
       }
     }
 
@@ -262,6 +272,8 @@ const App = {
     document.getElementById('set-maxChars').value = settings.maxChars || 1000;
     document.getElementById('set-schedule').value = settings.schedule || '0 */3 8-23 * * *';
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
+    document.getElementById('set-postType').value = settings.postType || 'diary';
+    document.getElementById('set-visibility').value = settings.visibility || 'public';
   },
 
   async saveSettings(e) {
@@ -270,7 +282,9 @@ const App = {
       minChars: parseInt(document.getElementById('set-minChars').value),
       maxChars: parseInt(document.getElementById('set-maxChars').value),
       schedule: document.getElementById('set-schedule').value,
-      postingEnabled: document.getElementById('set-postingEnabled').checked
+      postingEnabled: document.getElementById('set-postingEnabled').checked,
+      postType: document.getElementById('set-postType').value,
+      visibility: document.getElementById('set-visibility').value
     };
     await this.api('/settings', 'PUT', data);
     alert('設定を保存しました');
