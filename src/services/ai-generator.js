@@ -82,8 +82,20 @@ class AIGenerator {
       });
     }
 
-    const result = await model.generateContent(parts);
-    const text = result.response.text().trim();
+    let text;
+    try {
+      const result = await model.generateContent(parts);
+      text = result.response.text().trim();
+    } catch (err) {
+      // 画像が原因でブロックされた場合、画像なしでリトライ
+      if (parts.length > 1) {
+        console.log(`  ⚠️ 画像付きでブロックされたため、画像なしで再生成...`);
+        const retryResult = await model.generateContent([{ text: prompt }]);
+        text = retryResult.response.text().trim();
+      } else {
+        throw err;
+      }
+    }
 
     // タイトルと本文を分離
     const lines = text.split('\n');
