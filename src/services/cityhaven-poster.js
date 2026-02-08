@@ -96,39 +96,32 @@ class CityHavenPoster {
       await this._wait(3000);
 
       // 1. 投稿タイプ設定（ラジオボタン: #shame=写メ日記, #freepos=フリーポスト）
+      // ※ラジオボタンがCSSで非表示の場合があるのでJS経由でクリック
       const postType = options.postType || 'diary';
-      if (postType === 'freepost') {
-        await page.click(SELECTORS.postTypeFreepost);
-        console.log(`  📋 投稿タイプ: フリーポスト`);
-      } else {
-        await page.click(SELECTORS.postTypeDiary);
-        console.log(`  📋 投稿タイプ: 写メ日記`);
-      }
+      await page.evaluate((type) => {
+        const sel = type === 'freepost' ? '#freepos' : '#shame';
+        const el = document.querySelector(sel);
+        if (el) {
+          el.checked = true;
+          el.click();
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, postType);
+      console.log(`  📋 投稿タイプ: ${postType === 'freepost' ? 'フリーポスト' : '写メ日記'}`);
       await this._wait(1000);
 
       // 2. 公開範囲設定（セレクトボックス: #limited_diary_kind）
       const visibility = options.visibility || 'public';
-      if (visibility === 'mygirl') {
-        await page.select(SELECTORS.visibility, 'マイガール限定');
-        // valueがテキストと異なる場合の対応
-        await page.evaluate((sel) => {
-          const el = document.querySelector(sel);
-          for (const opt of el.options) {
-            if (opt.text.includes('マイガール')) { el.value = opt.value; break; }
-          }
-          el.dispatchEvent(new Event('change'));
-        }, SELECTORS.visibility);
-        console.log(`  🔒 公開範囲: マイガール限定`);
-      } else {
-        await page.evaluate((sel) => {
-          const el = document.querySelector(sel);
-          for (const opt of el.options) {
-            if (opt.text.includes('全公開')) { el.value = opt.value; break; }
-          }
-          el.dispatchEvent(new Event('change'));
-        }, SELECTORS.visibility);
-        console.log(`  🔒 公開範囲: 全公開`);
-      }
+      await page.evaluate((vis) => {
+        const el = document.querySelector('#limited_diary_kind');
+        if (!el) return;
+        const keyword = vis === 'mygirl' ? 'マイガール' : '全公開';
+        for (const opt of el.options) {
+          if (opt.text.includes(keyword)) { el.value = opt.value; break; }
+        }
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, visibility);
+      console.log(`  🔒 公開範囲: ${visibility === 'mygirl' ? 'マイガール限定' : '全公開'}`);
       await this._wait(500);
 
       // 3. タイトル入力（#diaryTitle）
