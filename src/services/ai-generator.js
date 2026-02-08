@@ -51,7 +51,7 @@ class AIGenerator {
 - 自然な日記風の文章にする
 - 絵文字を適度に使う
 - お客さんへの呼びかけを入れる
-- 添付画像に触れる内容を含める
+- 写真も一緒に投稿するので、写真を撮ったことや自撮りに軽く触れる内容を自然に含める
 - 宣伝っぽくならないようにする
 - 日常の出来事や気持ちを中心に書く
 
@@ -62,40 +62,9 @@ class AIGenerator {
 
 タイトルと本文だけを出力してください。余計な説明は不要です。`;
 
-    const parts = [{ text: prompt }];
-
-    // 画像がある場合は添付
-    if (imagePath && fs.existsSync(imagePath)) {
-      const imageData = fs.readFileSync(imagePath);
-      const ext = path.extname(imagePath).toLowerCase();
-      const mimeMap = {
-        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-        '.png': 'image/png', '.gif': 'image/gif',
-        '.webp': 'image/webp'
-      };
-      const mimeType = mimeMap[ext] || 'image/jpeg';
-      parts.push({
-        inlineData: {
-          mimeType,
-          data: imageData.toString('base64')
-        }
-      });
-    }
-
-    let text;
-    try {
-      const result = await model.generateContent(parts);
-      text = result.response.text().trim();
-    } catch (err) {
-      // 画像が原因でブロックされた場合、画像なしでリトライ
-      if (parts.length > 1) {
-        console.log(`  ⚠️ 画像付きでブロックされたため、画像なしで再生成...`);
-        const retryResult = await model.generateContent([{ text: prompt }]);
-        text = retryResult.response.text().trim();
-      } else {
-        throw err;
-      }
-    }
+    // テキストのみでGeminiに生成依頼（画像はCityHeaven投稿時にアップロード）
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
 
     // タイトルと本文を分離
     const lines = text.split('\n');
