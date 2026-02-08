@@ -4,13 +4,10 @@ const fs = require('fs');
 
 const SCREENSHOT_DIR = path.join(__dirname, '../../data/logs');
 
-// シティヘブン日記投稿フォームのセレクタ（実際のページから取得済み）
 const SELECTORS = {
-  // ログインページ
   loginId: '#userid',
   loginPw: '#passwd',
   loginBtn: '#loginBtn',
-  // 日記投稿ページ
   title: '#diaryTitle',
   body: '#diary',
   visibility: '#limited_diary_kind',
@@ -55,7 +52,6 @@ class CityHavenPoster {
     } catch (e) { /* 無視 */ }
   }
 
-  // ログイン
   async _login(page, account) {
     const loginUrl = account.loginUrl || 'https://spgirl.cityheaven.net/J1Login.php';
     console.log(`  🔑 ログイン中: ${loginUrl}`);
@@ -87,7 +83,6 @@ class CityHavenPoster {
     }
   }
 
-  // 日記を投稿
   async _postDiary(page, account, diary, imagePath, options = {}) {
     try {
       const diaryUrl = account.diaryUrl || 'https://spgirl.cityheaven.net/J4KeitaiDiaryPost.php';
@@ -95,8 +90,7 @@ class CityHavenPoster {
       await page.goto(diaryUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       await this._wait(3000);
 
-      // 1. 投稿タイプ設定（ラジオボタン: #shame=写メ日記, #freepos=フリーポスト）
-      // ※ラジオボタンがCSSで非表示の場合があるのでJS経由でクリック
+      // 1. 投稿タイプ設定
       const postType = options.postType || 'diary';
       await page.evaluate((type) => {
         const sel = type === 'freepost' ? '#freepos' : '#shame';
@@ -110,7 +104,7 @@ class CityHavenPoster {
       console.log(`  📋 投稿タイプ: ${postType === 'freepost' ? 'フリーポスト' : '写メ日記'}`);
       await this._wait(1000);
 
-      // 2. 公開範囲設定（セレクトボックス: #limited_diary_kind）
+      // 2. 公開範囲設定
       const visibility = options.visibility || 'public';
       await page.evaluate((vis) => {
         const el = document.querySelector('#limited_diary_kind');
@@ -124,22 +118,32 @@ class CityHavenPoster {
       console.log(`  🔒 公開範囲: ${visibility === 'mygirl' ? 'マイガール限定' : '全公開'}`);
       await this._wait(500);
 
-      // 3. タイトル入力（#diaryTitle）
+      // 3. タイトル入力
       await page.waitForSelector(SELECTORS.title, { timeout: 10000 });
       await page.type(SELECTORS.title, diary.title, { delay: 30 });
       console.log(`  ✏️ タイトル入力完了: "${diary.title}"`);
 
-      // 4. 本文入力（#diary textarea - 一括入力で高速化）
+      // 4. 本文入力 - CKEditor対応
+      // CKEditorが使われている場合はCKEditor APIで入力、なければtextareaに直接入力
       await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-      await page.evaluate((sel, text) => {
-        const el = document.querySelector(sel);
-        el.value = text;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, SELECTORS.body, diary.body);
-      console.log(`  ✏️ 本文入力完了 - ${diary.body.length}文字`);
+      const usedCKEditor = await page.evaluate((text) => {
+        // CKEditorインスタンスがあるか確認
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances.diary) {
+          CKEDITOR.instances.diary.setData(text);
+          return true;
+        }
+        // CKEditorがない場合はtextareaに直接入力
+        const el = document.querySelector('#diary');
+        if (el) {
+          el.value = text;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return false;
+      }, diary.body);
+      console.log(`  ✏️ 本文入力完了 - ${diary.body.length}文字 (CKEditor: ${usedCKEditor ? 'YES' : 'NO'})`);
 
-      // 5. 画像アップロード（#picSelect）
+      // 5. 画像アップロード
       if (imagePath && fs.existsSync(imagePath)) {
         const fileInput = await page.$(SELECTORS.photo);
         if (fileInput) {
@@ -153,78 +157,143 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. ページ上のボタン要素をデバッグ出力
-      const debugInfo = await page.evaluate(() => {
-        const diaryEl = document.querySelector('#diary');
-        const form = diaryEl ? diaryEl.closest('form') : null;
-        // ページ上の全ボタン系要素を収集
-        const allClickable = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button, a.btn, a[onclick], a[href*="submit"], a[href*="post"]'));
-        const info = allClickable.map(el => ({
-          tag: el.tagName,
-          type: el.type || '',
-          id: el.id || '',
-          value: (el.value || '').trim().substring(0, 50),
-          text: (el.textContent || '').trim().substring(0, 50),
-          onclick: el.getAttribute('onclick') ? el.getAttribute('onclick').substring(0, 80) : '',
-          href: el.href || ''
+      // 6. ページ構造を徹底的に調査
+      const pageInfo = await page.evaluate(() => {
+        // 全form要素
+        const forms = Array.from(document.querySelectorAll('form'));
+        const formInfo = forms.map((f, i) => ({
+          index: i,
+          id: f.id || '',
+          name: f.name || '',
+          action: f.action || '',
+          method: f.method || '',
+          hasSubmit: !!f.querySelector('input[type="submit"], button[type="submit"]'),
+          submitValue: f.querySelector('input[type="submit"]') ? f.querySelector('input[type="submit"]').value : '',
+          childCount: f.elements.length
         }));
-        return {
-          diaryFound: !!diaryEl,
-          formFound: !!form,
-          formId: form ? form.id : '',
-          formAction: form ? form.action : '',
-          clickableCount: info.length,
-          clickables: info
-        };
-      });
-      console.log(`  🔍 デバッグ: #diary=${debugInfo.diaryFound}, form=${debugInfo.formFound} (id=${debugInfo.formId}, action=${debugInfo.formAction})`);
-      console.log(`  🔍 ボタン系要素: ${debugInfo.clickableCount}個`);
-      for (const c of debugInfo.clickables) {
-        console.log(`    - <${c.tag}> type="${c.type}" id="${c.id}" value="${c.value}" text="${c.text}" onclick="${c.onclick}"`);
-      }
 
-      // 7. 投稿ボタンをクリック
-      const submitted = await page.evaluate(() => {
-        const diaryEl = document.querySelector('#diary');
-        const form = diaryEl ? diaryEl.closest('form') : null;
-
-        // A: form内のsubmitボタン（デコメーラー除外）
-        if (form) {
-          const btns = Array.from(form.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-          const filtered = btns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
-          const btn = filtered.find(b => b.type === 'submit') || filtered[0];
-          if (btn) { btn.click(); return `form内: ${(btn.value || btn.textContent || '').trim()}`; }
-          form.submit();
-          return 'form.submit()';
+        // 全要素から投稿関連キーワードを探す（テキストに「投稿」「確認」「送信」「下書き」「プレビュー」を含む要素）
+        const allElements = Array.from(document.querySelectorAll('*'));
+        const postRelated = [];
+        for (const el of allElements) {
+          const ownText = Array.from(el.childNodes)
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent.trim())
+            .join('');
+          if (ownText && ownText.match(/投稿|確認|送信|下書き|プレビュー|保存|登録/) && !ownText.includes('デコメ') && !ownText.includes('標準メール')) {
+            postRelated.push({
+              tag: el.tagName,
+              id: el.id || '',
+              className: (el.className || '').toString().substring(0, 60),
+              text: ownText.substring(0, 60),
+              onclick: el.getAttribute('onclick') ? el.getAttribute('onclick').substring(0, 100) : '',
+              href: el.getAttribute('href') || ''
+            });
+          }
         }
 
-        // B: ページ全体からsubmit/button（デコメーラー除外）
-        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-        const filtered = allBtns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
-        const postBtn = filtered.find(b => (b.textContent || b.value || '').match(/確認|投稿|送信|登録/));
-        if (postBtn) { postBtn.click(); return `button: ${(postBtn.value || postBtn.textContent || '').trim()}`; }
+        // グローバルJavaScript関数名を探す
+        const globalFuncs = [];
+        for (const key of Object.keys(window)) {
+          if (typeof window[key] === 'function' && key.match(/submit|post|diary|save|confirm|send/i)) {
+            globalFuncs.push(key);
+          }
+        }
 
-        // C: <a>タグも含めて検索（JavaScript実行型ボタンの可能性）
-        const links = Array.from(document.querySelectorAll('a'));
-        const postLink = links.find(a => {
-          const t = (a.textContent || '').trim();
-          return t.match(/確認|投稿|送信|登録/) && !t.includes('デコメ');
-        });
-        if (postLink) { postLink.click(); return `link: ${(postLink.textContent || '').trim()}`; }
+        return { forms: formInfo, postRelated, globalFuncs };
+      });
+
+      console.log(`  🔍 フォーム: ${pageInfo.forms.length}個`);
+      for (const f of pageInfo.forms) {
+        console.log(`    - form#${f.id} name="${f.name}" action="${f.action}" method="${f.method}" submit=${f.hasSubmit}(${f.submitValue}) elements=${f.childCount}`);
+      }
+      console.log(`  🔍 投稿関連要素: ${pageInfo.postRelated.length}個`);
+      for (const p of pageInfo.postRelated) {
+        console.log(`    - <${p.tag}> id="${p.id}" class="${p.className}" text="${p.text}" onclick="${p.onclick}" href="${p.href}"`);
+      }
+      console.log(`  🔍 関連JS関数: ${pageInfo.globalFuncs.join(', ') || 'なし'}`);
+
+      // 7. 投稿を実行
+      const submitted = await page.evaluate(() => {
+        // A: グローバル関数に submit/post 系があればそれを呼ぶ
+        for (const key of Object.keys(window)) {
+          if (typeof window[key] === 'function') {
+            // diarySubmit, submitDiary, doPost などを探す
+            if (key.match(/^(submit|diary.*submit|submit.*diary|doPost|postDiary|doSubmit|formSubmit)$/i)) {
+              window[key]();
+              return `globalFunc: ${key}()`;
+            }
+          }
+        }
+
+        // B: 投稿/確認テキストを持つ要素をクリック（デコメ/標準メール除外）
+        const allElements = Array.from(document.querySelectorAll('*'));
+        for (const el of allElements) {
+          const ownText = Array.from(el.childNodes)
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent.trim())
+            .join('');
+          if (ownText && ownText.match(/^(確認|投稿する|送信|投稿確認|確認画面)$/) && !ownText.includes('デコメ') && !ownText.includes('標準メール')) {
+            el.click();
+            return `element: <${el.tagName}> "${ownText}"`;
+          }
+        }
+
+        // C: form[name] or form[id] でsubmitを試みる
+        const forms = Array.from(document.querySelectorAll('form'));
+        for (const f of forms) {
+          const action = (f.action || '').toLowerCase();
+          const name = (f.name || '').toLowerCase();
+          if (action.includes('diary') || name.includes('diary') || name.includes('post')) {
+            f.submit();
+            return `formSubmit: ${f.name || f.id || f.action}`;
+          }
+        }
+
+        // D: diary関連のフォームを見つけて送信
+        const diaryEl = document.querySelector('#diary');
+        if (diaryEl) {
+          // #diary の祖先にformがなくても、同じ名前空間のformがあるかもしれない
+          const allForms = Array.from(document.querySelectorAll('form'));
+          for (const f of allForms) {
+            if (f.querySelector('#diaryTitle') || f.querySelector('#diary') || f.querySelector('#picSelect')) {
+              f.submit();
+              return `relatedForm: ${f.name || f.id || f.action}`;
+            }
+          }
+        }
 
         return false;
       });
-      if (!submitted) throw new Error('投稿ボタンが見つかりません');
-      console.log(`  🔘 ボタンクリック: "${submitted}"`);
+
+      if (submitted) {
+        console.log(`  🔘 投稿実行: "${submitted}"`);
+      } else {
+        console.log(`  ⚠️ 自動投稿できませんでした。手動操作が必要な可能性があります。`);
+      }
 
       await this._wait(5000);
 
-      // 8. 確認画面がある場合（「デコメーラー」は除外）
+      // 8. 確認画面がある場合
       const confirmBtn = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a'));
-        const filtered = buttons.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
-        const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
-        if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
+        const allElements = Array.from(document.querySelectorAll('*'));
+        for (const el of allElements) {
+          const ownText = Array.from(el.childNodes)
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent.trim())
+            .join('');
+          if (ownText && ownText.match(/^(投稿する|投稿|送信|確定|登録|OK)$/) && !ownText.includes('デコメ') && !ownText.includes('メール')) {
+            el.click();
+            return `<${el.tagName}> "${ownText}"`;
+          }
+        }
+        // submitボタンも探す
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
+        const filtered = btns.filter(b => !(b.textContent || b.value || '').includes('デコメ') && !(b.textContent || b.value || '').includes('メール'));
+        if (filtered.length > 0) {
+          filtered[0].click();
+          return `submit: ${filtered[0].value || filtered[0].textContent}`;
+        }
         return false;
       });
       if (confirmBtn) {
@@ -234,7 +303,7 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'after-post');
 
-      // 8. 投稿確認: 一覧ページに移動して確認
+      // 9. 投稿確認: 一覧ページに移動して確認
       if (account.diaryListUrl) {
         console.log(`  🔍 投稿確認: 一覧ページへ移動...`);
         await page.goto(account.diaryListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -249,7 +318,7 @@ class CityHavenPoster {
         if (verified) {
           console.log(`  ✅ 投稿確認OK: 一覧にタイトルを確認`);
         } else {
-          console.log(`  ⚠️ 投稿確認: 一覧にタイトルが見つかりません（反映待ちの可能性あり）`);
+          console.log(`  ⚠️ 投稿確認: 一覧にタイトルが見つかりません`);
         }
       }
 
@@ -262,7 +331,6 @@ class CityHavenPoster {
     }
   }
 
-  // メイン投稿処理
   async post(account, diary, imagePath, options = {}) {
     let page = null;
     try {
