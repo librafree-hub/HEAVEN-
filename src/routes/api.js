@@ -129,6 +129,17 @@ router.post('/accounts/:accountId/images', upload.array('images', 20), (req, res
   });
 });
 
+// 画像削除
+router.delete('/accounts/:accountId/images/:filename', (req, res) => {
+  const filename = decodeURIComponent(req.params.filename);
+  const deleted = imageManager.deleteImage(req.params.accountId, filename);
+  if (deleted) {
+    res.json({ success: true, images: imageManager.getAccountImages(req.params.accountId) });
+  } else {
+    res.status(404).json({ error: '画像が見つかりません' });
+  }
+});
+
 // === 投稿履歴 ===
 
 router.get('/posts', (req, res) => {

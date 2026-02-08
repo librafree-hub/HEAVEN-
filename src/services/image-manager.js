@@ -58,6 +58,16 @@ class ImageManager {
     };
   }
 
+  // 画像を削除
+  deleteImage(accountId, filename) {
+    const filePath = path.join(this.getAccountDir(accountId), filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+    return false;
+  }
+
   // アカウントごとの画像統計
   getImageStats(accountId) {
     const allImages = this.getAccountImages(accountId);

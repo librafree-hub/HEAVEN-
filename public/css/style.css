@@ -427,6 +427,29 @@ body {
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
+  position: relative;
+}
+
+.image-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(248, 113, 113, 0.9);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-thumb:hover .image-delete-btn {
+  display: flex;
 }
 
 .image-thumb img {

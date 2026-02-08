@@ -175,8 +175,18 @@ const App = {
     }
 
     el.innerHTML = data.images.map(img =>
-      `<div class="image-thumb"><img src="/api/accounts/${accountId}/images/${encodeURIComponent(img)}" alt="${this.esc(img)}" onerror="this.parentElement.innerHTML='<div style=padding:8px;font-size:10px>${this.esc(img)}</div>'"></div>`
+      `<div class="image-thumb">
+        <img src="/api/accounts/${accountId}/images/${encodeURIComponent(img)}" alt="${this.esc(img)}" onerror="this.parentElement.innerHTML='<div style=padding:8px;font-size:10px>${this.esc(img)}</div>'">
+        <button class="image-delete-btn" onclick="App.deleteImage('${accountId}','${this.esc(img)}')" title="削除">&times;</button>
+      </div>`
     ).join('');
+  },
+
+  async deleteImage(accountId, filename) {
+    if (!confirm(`この画像を削除しますか？\n${filename}`)) return;
+    await fetch(`/api/accounts/${accountId}/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    await this.refreshImages(accountId);
+    this.loadAccounts();
   },
 
   async uploadImages(e) {
