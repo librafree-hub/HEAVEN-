@@ -153,16 +153,29 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. 投稿ボタンをクリック（「デコメーラー」は除外）
+      // 6. 投稿ボタンをクリック
+      // #diary(本文textarea)が含まれるformを特定し、そのform内のsubmitボタンを押す
       const submitted = await page.evaluate(() => {
+        // まず #diary が属するフォームを探す
+        const diaryEl = document.querySelector('#diary');
+        const form = diaryEl ? diaryEl.closest('form') : null;
+
+        if (form) {
+          // フォーム内のsubmitボタンを探す（デコメーラー除外）
+          const btns = Array.from(form.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+          const filtered = btns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
+          const btn = filtered.find(b => b.type === 'submit') || filtered[0];
+          if (btn) { btn.click(); return `form内: ${(btn.value || btn.textContent || '').trim()}`; }
+          // フォーム内にボタンがなければformをsubmit
+          form.submit();
+          return 'form.submit()';
+        }
+
+        // フォームが見つからない場合のフォールバック
         const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-        // デコメーラー関連は除外
         const filtered = allBtns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
-        const postBtn = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確認|登録/));
-        if (postBtn) { postBtn.click(); return (postBtn.value || postBtn.textContent || '').trim(); }
-        // フィルタ後のsubmitボタン
-        const submitBtn = filtered.find(b => b.type === 'submit');
-        if (submitBtn) { submitBtn.click(); return (submitBtn.value || submitBtn.textContent || '').trim(); }
+        const postBtn = filtered.find(b => (b.textContent || b.value || '').match(/確認|投稿|送信|登録/));
+        if (postBtn) { postBtn.click(); return `fallback: ${(postBtn.value || postBtn.textContent || '').trim()}`; }
         return false;
       });
       if (!submitted) throw new Error('投稿ボタンが見つかりません');
@@ -172,6 +185,9 @@ class CityHavenPoster {
 
       // 7. 確認画面がある場合（「デコメーラー」は除外）
       const confirmBtn = await page.evaluate(() => {
+        const diaryEl = document.querySelector('#diary');
+        const form = diaryEl ? diaryEl.closest('form') : null;
+        // 確認画面ではフォーム構造が変わるのでページ全体から探す
         const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
         const filtered = buttons.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
         const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
