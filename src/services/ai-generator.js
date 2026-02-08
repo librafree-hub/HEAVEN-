@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
 
@@ -15,7 +15,15 @@ class AIGenerator {
       }
       const genAI = new GoogleGenerativeAI(apiKey);
       const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-      this.model = genAI.getGenerativeModel({ model: modelName });
+      this.model = genAI.getGenerativeModel({
+        model: modelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ]
+      });
     }
     return this.model;
   }

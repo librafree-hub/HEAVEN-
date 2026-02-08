@@ -114,7 +114,8 @@ const App = {
     document.getElementById('acc-postsPerDay').value = a.postsPerDay || 3;
     document.getElementById('acc-loginUrl').value = a.loginUrl || '';
     document.getElementById('acc-loginId').value = a.loginId || '';
-    document.getElementById('acc-loginPassword').value = a.loginPassword || '';
+    document.getElementById('acc-loginPassword').value = '';
+    document.getElementById('acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み（変更する場合のみ入力）' : 'パスワードを入力';
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
@@ -133,7 +134,7 @@ const App = {
       postsPerDay: parseInt(document.getElementById('acc-postsPerDay').value) || 3,
       loginUrl: document.getElementById('acc-loginUrl').value,
       loginId: document.getElementById('acc-loginId').value,
-      loginPassword: document.getElementById('acc-loginPassword').value,
+      loginPassword: document.getElementById('acc-loginPassword').value || '***',
       diaryUrl: document.getElementById('acc-diaryUrl').value,
       postType: document.getElementById('acc-postType').value,
       visibility: document.getElementById('acc-visibility').value,
