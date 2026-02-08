@@ -153,13 +153,16 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. 投稿ボタンをクリック
+      // 6. 投稿ボタンをクリック（「デコメーラー」は除外）
       const submitted = await page.evaluate(() => {
-        const btn = document.querySelector('input[type="submit"], button[type="submit"]');
-        if (btn) { btn.click(); return btn.value || btn.textContent || 'submit'; }
-        const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a'));
-        const postBtn = buttons.find(b => (b.textContent || b.value || '').match(/投稿|送信|確認|登録/));
-        if (postBtn) { postBtn.click(); return postBtn.textContent || postBtn.value; }
+        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        // デコメーラー関連は除外
+        const filtered = allBtns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
+        const postBtn = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確認|登録/));
+        if (postBtn) { postBtn.click(); return (postBtn.value || postBtn.textContent || '').trim(); }
+        // フィルタ後のsubmitボタン
+        const submitBtn = filtered.find(b => b.type === 'submit');
+        if (submitBtn) { submitBtn.click(); return (submitBtn.value || submitBtn.textContent || '').trim(); }
         return false;
       });
       if (!submitted) throw new Error('投稿ボタンが見つかりません');
@@ -167,11 +170,12 @@ class CityHavenPoster {
 
       await this._wait(5000);
 
-      // 7. 確認画面がある場合
+      // 7. 確認画面がある場合（「デコメーラー」は除外）
       const confirmBtn = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-        const c = buttons.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
-        if (c) { c.click(); return c.textContent || c.value; }
+        const filtered = buttons.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
+        const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
+        if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
         return false;
       });
       if (confirmBtn) {
@@ -180,6 +184,26 @@ class CityHavenPoster {
       }
 
       await this._screenshot(page, 'after-post');
+
+      // 8. 投稿確認: 一覧ページに移動して確認
+      if (account.diaryListUrl) {
+        console.log(`  🔍 投稿確認: 一覧ページへ移動...`);
+        await page.goto(account.diaryListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await this._wait(3000);
+        await this._screenshot(page, 'diary-list');
+
+        const verified = await page.evaluate((title) => {
+          const body = document.body.innerText || '';
+          return body.includes(title);
+        }, diary.title);
+
+        if (verified) {
+          console.log(`  ✅ 投稿確認OK: 一覧にタイトルを確認`);
+        } else {
+          console.log(`  ⚠️ 投稿確認: 一覧にタイトルが見つかりません（反映待ちの可能性あり）`);
+        }
+      }
+
       console.log(`  ✅ 投稿完了`);
       return { success: true };
     } catch (e) {
