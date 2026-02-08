@@ -458,6 +458,16 @@ body {
   object-fit: cover;
 }
 
+.image-fallback {
+  padding: 6px;
+  font-size: 10px;
+  word-break: break-all;
+  color: var(--text-muted);
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
 /* レスポンシブ */
 @media (max-width: 768px) {
   .app { flex-direction: column; }

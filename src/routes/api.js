@@ -120,6 +120,17 @@ router.get('/accounts/:accountId/images', (req, res) => {
   res.json({ images, ...stats });
 });
 
+// 個別画像の配信
+router.get('/accounts/:accountId/images/:filename', (req, res) => {
+  const filename = decodeURIComponent(req.params.filename);
+  const filePath = path.join(imageManager.getAccountDir(req.params.accountId), filename);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).end();
+  }
+});
+
 // 画像アップロード
 router.post('/accounts/:accountId/images', upload.array('images', 20), (req, res) => {
   res.json({

@@ -176,7 +176,8 @@ const App = {
 
     el.innerHTML = data.images.map(img =>
       `<div class="image-thumb">
-        <img src="/api/accounts/${accountId}/images/${encodeURIComponent(img)}" alt="${this.esc(img)}" onerror="this.parentElement.innerHTML='<div style=padding:8px;font-size:10px>${this.esc(img)}</div>'">
+        <img src="/api/accounts/${accountId}/images/${encodeURIComponent(img)}" alt="${this.esc(img)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+        <div class="image-fallback" style="display:none">${this.esc(img)}</div>
         <button class="image-delete-btn" onclick="App.deleteImage('${accountId}','${this.esc(img)}')" title="削除">&times;</button>
       </div>`
     ).join('');
