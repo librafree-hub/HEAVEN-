@@ -191,6 +191,13 @@ class CityHavenPoster {
       await this._wait(5000);
       await this._screenshot(page, 'preview');
 
+      // confirm()ダイアログが出たら自動でOKを押す
+      page.on('dialog', async dialog => {
+        console.log(`  💬 ダイアログ検出: "${dialog.message().substring(0, 60)}..."`);
+        await dialog.accept();
+        console.log(`  ✅ ダイアログOK押下`);
+      });
+
       // 7. プレビュー画面で「投稿」ボタンをクリック（右上にあるはず）
       console.log(`  🔘 投稿ボタンを探しています...`);
       const postClicked = await page.evaluate(() => {
