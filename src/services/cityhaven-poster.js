@@ -153,29 +153,65 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. 投稿ボタンをクリック
-      // #diary(本文textarea)が含まれるformを特定し、そのform内のsubmitボタンを押す
+      // 6. ページ上のボタン要素をデバッグ出力
+      const debugInfo = await page.evaluate(() => {
+        const diaryEl = document.querySelector('#diary');
+        const form = diaryEl ? diaryEl.closest('form') : null;
+        // ページ上の全ボタン系要素を収集
+        const allClickable = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button, a.btn, a[onclick], a[href*="submit"], a[href*="post"]'));
+        const info = allClickable.map(el => ({
+          tag: el.tagName,
+          type: el.type || '',
+          id: el.id || '',
+          value: (el.value || '').trim().substring(0, 50),
+          text: (el.textContent || '').trim().substring(0, 50),
+          onclick: el.getAttribute('onclick') ? el.getAttribute('onclick').substring(0, 80) : '',
+          href: el.href || ''
+        }));
+        return {
+          diaryFound: !!diaryEl,
+          formFound: !!form,
+          formId: form ? form.id : '',
+          formAction: form ? form.action : '',
+          clickableCount: info.length,
+          clickables: info
+        };
+      });
+      console.log(`  🔍 デバッグ: #diary=${debugInfo.diaryFound}, form=${debugInfo.formFound} (id=${debugInfo.formId}, action=${debugInfo.formAction})`);
+      console.log(`  🔍 ボタン系要素: ${debugInfo.clickableCount}個`);
+      for (const c of debugInfo.clickables) {
+        console.log(`    - <${c.tag}> type="${c.type}" id="${c.id}" value="${c.value}" text="${c.text}" onclick="${c.onclick}"`);
+      }
+
+      // 7. 投稿ボタンをクリック
       const submitted = await page.evaluate(() => {
-        // まず #diary が属するフォームを探す
         const diaryEl = document.querySelector('#diary');
         const form = diaryEl ? diaryEl.closest('form') : null;
 
+        // A: form内のsubmitボタン（デコメーラー除外）
         if (form) {
-          // フォーム内のsubmitボタンを探す（デコメーラー除外）
           const btns = Array.from(form.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
           const filtered = btns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
           const btn = filtered.find(b => b.type === 'submit') || filtered[0];
           if (btn) { btn.click(); return `form内: ${(btn.value || btn.textContent || '').trim()}`; }
-          // フォーム内にボタンがなければformをsubmit
           form.submit();
           return 'form.submit()';
         }
 
-        // フォームが見つからない場合のフォールバック
+        // B: ページ全体からsubmit/button（デコメーラー除外）
         const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
         const filtered = allBtns.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
         const postBtn = filtered.find(b => (b.textContent || b.value || '').match(/確認|投稿|送信|登録/));
-        if (postBtn) { postBtn.click(); return `fallback: ${(postBtn.value || postBtn.textContent || '').trim()}`; }
+        if (postBtn) { postBtn.click(); return `button: ${(postBtn.value || postBtn.textContent || '').trim()}`; }
+
+        // C: <a>タグも含めて検索（JavaScript実行型ボタンの可能性）
+        const links = Array.from(document.querySelectorAll('a'));
+        const postLink = links.find(a => {
+          const t = (a.textContent || '').trim();
+          return t.match(/確認|投稿|送信|登録/) && !t.includes('デコメ');
+        });
+        if (postLink) { postLink.click(); return `link: ${(postLink.textContent || '').trim()}`; }
+
         return false;
       });
       if (!submitted) throw new Error('投稿ボタンが見つかりません');
@@ -183,12 +219,9 @@ class CityHavenPoster {
 
       await this._wait(5000);
 
-      // 7. 確認画面がある場合（「デコメーラー」は除外）
+      // 8. 確認画面がある場合（「デコメーラー」は除外）
       const confirmBtn = await page.evaluate(() => {
-        const diaryEl = document.querySelector('#diary');
-        const form = diaryEl ? diaryEl.closest('form') : null;
-        // 確認画面ではフォーム構造が変わるのでページ全体から探す
-        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a'));
         const filtered = buttons.filter(b => !(b.textContent || b.value || '').includes('デコメ'));
         const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
         if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
