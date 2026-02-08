@@ -157,149 +157,89 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. ページ構造を徹底的に調査
-      const pageInfo = await page.evaluate(() => {
-        // 全form要素
-        const forms = Array.from(document.querySelectorAll('form'));
-        const formInfo = forms.map((f, i) => ({
-          index: i,
-          id: f.id || '',
-          name: f.name || '',
-          action: f.action || '',
-          method: f.method || '',
-          hasSubmit: !!f.querySelector('input[type="submit"], button[type="submit"]'),
-          submitValue: f.querySelector('input[type="submit"]') ? f.querySelector('input[type="submit"]').value : '',
-          childCount: f.elements.length
-        }));
-
-        // 全要素から投稿関連キーワードを探す（テキストに「投稿」「確認」「送信」「下書き」「プレビュー」を含む要素）
+      // 6. 「一時保存＆プレビュー」ボタンをクリック
+      console.log(`  🔘 一時保存＆プレビューを探しています...`);
+      const previewClicked = await page.evaluate(() => {
+        // 「一時保存＆プレビュー」テキストを持つ要素を探してクリック
         const allElements = Array.from(document.querySelectorAll('*'));
-        const postRelated = [];
         for (const el of allElements) {
+          const text = (el.textContent || '').trim();
           const ownText = Array.from(el.childNodes)
             .filter(n => n.nodeType === Node.TEXT_NODE)
             .map(n => n.textContent.trim())
             .join('');
-          if (ownText && ownText.match(/投稿|確認|送信|下書き|プレビュー|保存|登録/) && !ownText.includes('デコメ') && !ownText.includes('標準メール')) {
-            postRelated.push({
-              tag: el.tagName,
-              id: el.id || '',
-              className: (el.className || '').toString().substring(0, 60),
-              text: ownText.substring(0, 60),
-              onclick: el.getAttribute('onclick') ? el.getAttribute('onclick').substring(0, 100) : '',
-              href: el.getAttribute('href') || ''
-            });
-          }
-        }
-
-        // グローバルJavaScript関数名を探す
-        const globalFuncs = [];
-        for (const key of Object.keys(window)) {
-          if (typeof window[key] === 'function' && key.match(/submit|post|diary|save|confirm|send/i)) {
-            globalFuncs.push(key);
-          }
-        }
-
-        return { forms: formInfo, postRelated, globalFuncs };
-      });
-
-      console.log(`  🔍 フォーム: ${pageInfo.forms.length}個`);
-      for (const f of pageInfo.forms) {
-        console.log(`    - form#${f.id} name="${f.name}" action="${f.action}" method="${f.method}" submit=${f.hasSubmit}(${f.submitValue}) elements=${f.childCount}`);
-      }
-      console.log(`  🔍 投稿関連要素: ${pageInfo.postRelated.length}個`);
-      for (const p of pageInfo.postRelated) {
-        console.log(`    - <${p.tag}> id="${p.id}" class="${p.className}" text="${p.text}" onclick="${p.onclick}" href="${p.href}"`);
-      }
-      console.log(`  🔍 関連JS関数: ${pageInfo.globalFuncs.join(', ') || 'なし'}`);
-
-      // 7. 投稿を実行
-      const submitted = await page.evaluate(() => {
-        // A: グローバル関数に submit/post 系があればそれを呼ぶ
-        for (const key of Object.keys(window)) {
-          if (typeof window[key] === 'function') {
-            // diarySubmit, submitDiary, doPost などを探す
-            if (key.match(/^(submit|diary.*submit|submit.*diary|doPost|postDiary|doSubmit|formSubmit)$/i)) {
-              window[key]();
-              return `globalFunc: ${key}()`;
-            }
-          }
-        }
-
-        // B: 投稿/確認テキストを持つ要素をクリック（デコメ/標準メール除外）
-        const allElements = Array.from(document.querySelectorAll('*'));
-        for (const el of allElements) {
-          const ownText = Array.from(el.childNodes)
-            .filter(n => n.nodeType === Node.TEXT_NODE)
-            .map(n => n.textContent.trim())
-            .join('');
-          if (ownText && ownText.match(/^(確認|投稿する|送信|投稿確認|確認画面)$/) && !ownText.includes('デコメ') && !ownText.includes('標準メール')) {
-            el.click();
-            return `element: <${el.tagName}> "${ownText}"`;
-          }
-        }
-
-        // C: form[name] or form[id] でsubmitを試みる
-        const forms = Array.from(document.querySelectorAll('form'));
-        for (const f of forms) {
-          const action = (f.action || '').toLowerCase();
-          const name = (f.name || '').toLowerCase();
-          if (action.includes('diary') || name.includes('diary') || name.includes('post')) {
-            f.submit();
-            return `formSubmit: ${f.name || f.id || f.action}`;
-          }
-        }
-
-        // D: diary関連のフォームを見つけて送信
-        const diaryEl = document.querySelector('#diary');
-        if (diaryEl) {
-          // #diary の祖先にformがなくても、同じ名前空間のformがあるかもしれない
-          const allForms = Array.from(document.querySelectorAll('form'));
-          for (const f of allForms) {
-            if (f.querySelector('#diaryTitle') || f.querySelector('#diary') || f.querySelector('#picSelect')) {
-              f.submit();
-              return `relatedForm: ${f.name || f.id || f.action}`;
-            }
-          }
-        }
-
-        return false;
-      });
-
-      if (submitted) {
-        console.log(`  🔘 投稿実行: "${submitted}"`);
-      } else {
-        console.log(`  ⚠️ 自動投稿できませんでした。手動操作が必要な可能性があります。`);
-      }
-
-      await this._wait(5000);
-
-      // 8. 確認画面がある場合
-      const confirmBtn = await page.evaluate(() => {
-        const allElements = Array.from(document.querySelectorAll('*'));
-        for (const el of allElements) {
-          const ownText = Array.from(el.childNodes)
-            .filter(n => n.nodeType === Node.TEXT_NODE)
-            .map(n => n.textContent.trim())
-            .join('');
-          if (ownText && ownText.match(/^(投稿する|投稿|送信|確定|登録|OK)$/) && !ownText.includes('デコメ') && !ownText.includes('メール')) {
+          if (ownText.includes('一時保存') && ownText.includes('プレビュー')) {
             el.click();
             return `<${el.tagName}> "${ownText}"`;
           }
         }
-        // submitボタンも探す
-        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
-        const filtered = btns.filter(b => !(b.textContent || b.value || '').includes('デコメ') && !(b.textContent || b.value || '').includes('メール'));
-        if (filtered.length > 0) {
-          filtered[0].click();
-          return `submit: ${filtered[0].value || filtered[0].textContent}`;
+        // storageSave関数があれば呼ぶ
+        if (typeof storageSave === 'function') {
+          storageSave();
+          return 'storageSave()';
         }
         return false;
       });
-      if (confirmBtn) {
-        console.log(`  🔘 確認ボタンクリック: "${confirmBtn}"`);
-        await this._wait(5000);
+
+      if (previewClicked) {
+        console.log(`  🔘 プレビュークリック: "${previewClicked}"`);
+      } else {
+        console.log(`  ⚠️ 「一時保存＆プレビュー」が見つかりません`);
       }
+
+      // プレビュー画面の読み込みを待つ
+      await this._wait(5000);
+      await this._screenshot(page, 'preview');
+
+      // 7. プレビュー画面で「投稿」ボタンをクリック（右上にあるはず）
+      console.log(`  🔘 投稿ボタンを探しています...`);
+      const postClicked = await page.evaluate(() => {
+        // ページ上の全要素から「投稿」テキストを持つクリッカブル要素を探す
+        const allElements = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"], span, div'));
+        for (const el of allElements) {
+          const ownText = Array.from(el.childNodes)
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent.trim())
+            .join('');
+          // 「投稿」単体のテキストを持つ要素（「投稿方法」や「日記を投稿する」は除外）
+          if (ownText === '投稿' || ownText === '投稿する') {
+            el.click();
+            return `<${el.tagName}> "${ownText}" class="${(el.className || '').toString().substring(0, 50)}"`;
+          }
+        }
+        // submitボタンも探す（デコメ/メール除外）
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
+        for (const b of btns) {
+          const text = (b.value || b.textContent || '').trim();
+          if (text.match(/^投稿/) && !text.includes('デコメ') && !text.includes('メール')) {
+            b.click();
+            return `submit: "${text}"`;
+          }
+        }
+        return false;
+      });
+
+      if (postClicked) {
+        console.log(`  🔘 投稿ボタンクリック: "${postClicked}"`);
+      } else {
+        // 投稿ボタンが見つからない場合、ページ上の全ボタン的要素をデバッグ出力
+        const debugBtns = await page.evaluate(() => {
+          const elems = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'));
+          return elems.slice(0, 30).map(el => ({
+            tag: el.tagName,
+            text: (el.textContent || el.value || '').trim().substring(0, 50),
+            id: el.id || '',
+            className: (el.className || '').toString().substring(0, 40),
+            href: el.getAttribute('href') || ''
+          }));
+        });
+        console.log(`  ⚠️ 投稿ボタンが見つかりません。プレビュー画面の要素一覧:`);
+        for (const b of debugBtns) {
+          console.log(`    - <${b.tag}> text="${b.text}" id="${b.id}" class="${b.className}" href="${b.href}"`);
+        }
+      }
+
+      await this._wait(5000);
 
       await this._screenshot(page, 'after-post');
 
