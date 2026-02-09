@@ -206,7 +206,9 @@ router.get('/settings', (req, res) => {
         minChars: 450,
         maxChars: 1000,
         postingEnabled: false,
-        schedule: '0 */3 8-23 * * *'
+        scheduleStartHour: 0,
+        scheduleEndHour: 23,
+        scheduleInterval: 3
       });
     }
   } catch (e) {

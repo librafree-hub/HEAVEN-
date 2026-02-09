@@ -278,14 +278,84 @@ const App = {
   },
 
   // === 設定 ===
+  _currentSchedulePreset: '24h',
+
   async loadSettings() {
     const settings = await this.api('/settings');
     document.getElementById('set-minChars').value = settings.minChars || 450;
     document.getElementById('set-maxChars').value = settings.maxChars || 1000;
-    document.getElementById('set-schedule').value = settings.schedule || '0 */3 8-23 * * *';
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
     document.getElementById('set-postType').value = settings.postType || 'diary';
     document.getElementById('set-visibility').value = settings.visibility || 'public';
+
+    // スケジュール設定の読み込み
+    const startHour = settings.scheduleStartHour ?? 0;
+    const endHour = settings.scheduleEndHour ?? 23;
+    const interval = settings.scheduleInterval ?? 3;
+
+    document.getElementById('set-startHour').value = startHour;
+    document.getElementById('set-endHour').value = endHour;
+    document.getElementById('set-interval').value = interval;
+
+    // プリセット判定
+    if (startHour === 0 && endHour === 23) {
+      this.setSchedulePreset('24h');
+    } else if (startHour === 8 && endHour === 23) {
+      this.setSchedulePreset('daytime');
+    } else {
+      this.setSchedulePreset('custom');
+    }
+
+    // イベントリスナー追加
+    ['set-startHour', 'set-endHour', 'set-interval'].forEach(id => {
+      document.getElementById(id).onchange = () => this.updateSchedulePreview();
+    });
+
+    this.updateSchedulePreview();
+  },
+
+  setSchedulePreset(preset) {
+    this._currentSchedulePreset = preset;
+
+    // ボタン表示更新
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.preset === preset);
+    });
+
+    const customRange = document.getElementById('schedule-custom-range');
+
+    if (preset === '24h') {
+      document.getElementById('set-startHour').value = 0;
+      document.getElementById('set-endHour').value = 23;
+      customRange.style.display = 'none';
+    } else if (preset === 'daytime') {
+      document.getElementById('set-startHour').value = 8;
+      document.getElementById('set-endHour').value = 23;
+      customRange.style.display = 'none';
+    } else {
+      customRange.style.display = '';
+    }
+
+    this.updateSchedulePreview();
+  },
+
+  updateSchedulePreview() {
+    const startHour = parseInt(document.getElementById('set-startHour').value);
+    const endHour = parseInt(document.getElementById('set-endHour').value);
+    const interval = parseInt(document.getElementById('set-interval').value);
+
+    const grid = document.getElementById('hour-grid');
+    let html = '';
+    const activeHours = new Set();
+    for (let h = startHour; h <= endHour; h += interval) {
+      activeHours.add(h);
+    }
+
+    for (let h = 0; h < 24; h++) {
+      const isActive = activeHours.has(h);
+      html += `<div class="hour-cell${isActive ? ' active' : ''}">${h}時</div>`;
+    }
+    grid.innerHTML = html;
   },
 
   async saveSettings(e) {
@@ -293,7 +363,9 @@ const App = {
     const data = {
       minChars: parseInt(document.getElementById('set-minChars').value),
       maxChars: parseInt(document.getElementById('set-maxChars').value),
-      schedule: document.getElementById('set-schedule').value,
+      scheduleStartHour: parseInt(document.getElementById('set-startHour').value),
+      scheduleEndHour: parseInt(document.getElementById('set-endHour').value),
+      scheduleInterval: parseInt(document.getElementById('set-interval').value),
       postingEnabled: document.getElementById('set-postingEnabled').checked,
       postType: document.getElementById('set-postType').value,
       visibility: document.getElementById('set-visibility').value

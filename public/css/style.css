@@ -468,6 +468,60 @@ body {
   align-items: center;
 }
 
+/* スケジュール設定 */
+.schedule-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  transition: all 0.2s;
+}
+
+.preset-btn.active {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+}
+
+.schedule-preview {
+  margin-top: 12px;
+}
+
+.schedule-preview label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.hour-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
+}
+
+.hour-cell {
+  text-align: center;
+  padding: 6px 2px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.hour-cell.active {
+  background: rgba(124, 92, 252, 0.25);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* レスポンシブ */
 @media (max-width: 768px) {
   .app { flex-direction: column; }
@@ -477,6 +531,8 @@ body {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
   .content { padding: 16px; }
+  .hour-grid { grid-template-columns: repeat(8, 1fr); }
+  .schedule-presets { flex-wrap: wrap; }
 }
 
 /* 投稿プレビュー */

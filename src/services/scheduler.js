@@ -13,6 +13,32 @@ class Scheduler {
     this.status = { lastRun: null, nextRun: null, isRunning: false };
   }
 
+  // スケジュール設定からcron式を生成
+  _buildCronExpression(settings) {
+    const startHour = settings.scheduleStartHour ?? 0;
+    const endHour = settings.scheduleEndHour ?? 23;
+    const interval = settings.scheduleInterval ?? 3;
+
+    // 24時間の場合
+    if (startHour === 0 && endHour === 23) {
+      return `0 0 */${interval} * * *`;
+    }
+    // 時間帯指定
+    return `0 0 ${startHour}-${endHour}/${interval} * * *`;
+  }
+
+  // 次回の投稿予定時刻を計算
+  _calcNextPostTimes(settings) {
+    const startHour = settings.scheduleStartHour ?? 0;
+    const endHour = settings.scheduleEndHour ?? 23;
+    const interval = settings.scheduleInterval ?? 3;
+    const hours = [];
+    for (let h = startHour; h <= endHour; h += interval) {
+      hours.push(h);
+    }
+    return hours;
+  }
+
   // アカウント設定を読み込む
   _loadAccounts() {
     const accountsPath = path.join(__dirname, '../../config/accounts.json');
@@ -171,7 +197,10 @@ class Scheduler {
   // スケジュール開始
   start() {
     const settings = this._loadSettings();
-    const cronExpression = settings.schedule || '0 */3 8-23 * * *'; // デフォルト: 8時〜23時の間、3時間毎
+    // 新形式（時間帯+間隔）があればそこからcron生成、なければ旧形式フォールバック
+    const cronExpression = (settings.scheduleInterval != null)
+      ? this._buildCronExpression(settings)
+      : (settings.schedule || '0 0 */3 * * *');
 
     this.stop();
 
@@ -182,8 +211,11 @@ class Scheduler {
 
     this.jobs.push(job);
     this.running = true;
+    const postHours = this._calcNextPostTimes(settings);
     this.status.nextRun = '次のスケジュール時刻';
+    this.status.postHours = postHours;
     console.log(`📅 スケジューラー開始: ${cronExpression}`);
+    console.log(`   投稿予定時刻: ${postHours.map(h => h + '時').join(', ')}`);
   }
 
   // スケジュール停止
