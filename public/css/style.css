@@ -506,6 +506,46 @@ body {
   padding: 8px 0;
 }
 
+/* 一括スケジュール */
+.modal-wide {
+  max-width: 800px;
+}
+
+.bulk-add-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.bulk-add-section p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.bulk-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bulk-schedule-row {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.bulk-schedule-row .toggle-label {
+  margin-bottom: 8px;
+}
+
+.bulk-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text) !important;
+}
+
 /* レスポンシブ */
 @media (max-width: 768px) {
   .app { flex-direction: column; }

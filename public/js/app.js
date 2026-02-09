@@ -318,6 +318,91 @@ const App = {
     ).join('');
   },
 
+  // === 一括スケジュール ===
+  _bulkAccounts: [],
+
+  async showBulkSchedule() {
+    const accounts = await this.api('/accounts');
+    this._bulkAccounts = accounts.map(a => ({
+      id: a.id,
+      name: a.name,
+      scheduleTimes: (a.scheduleTimes || []).slice(),
+      checked: true
+    }));
+    this.renderBulkSchedule();
+    document.getElementById('bulk-check-all').checked = true;
+    document.getElementById('modal-bulk-schedule').style.display = 'flex';
+  },
+
+  renderBulkSchedule() {
+    const el = document.getElementById('bulk-schedule-list');
+    el.innerHTML = this._bulkAccounts.map((a, i) => `
+      <div class="bulk-schedule-row">
+        <label class="toggle-label">
+          <input type="checkbox" ${a.checked ? 'checked' : ''} onchange="App._bulkAccounts[${i}].checked=this.checked">
+          <span class="bulk-name">${this.esc(a.name)}</span>
+        </label>
+        <div class="schedule-times-list">
+          ${a.scheduleTimes.length > 0
+            ? a.scheduleTimes.map(t =>
+                `<span class="schedule-time-tag">${t}<button type="button" class="remove-time" onclick="App.bulkRemoveSingleTime(${i},'${t}')">&times;</button></span>`
+              ).join('')
+            : '<span class="schedule-times-empty">未設定</span>'
+          }
+        </div>
+      </div>
+    `).join('');
+  },
+
+  bulkToggleAll(checked) {
+    this._bulkAccounts.forEach(a => a.checked = checked);
+    this.renderBulkSchedule();
+  },
+
+  bulkAddTime() {
+    const h = document.getElementById('bulk-addHour').value.padStart(2, '0');
+    const m = document.getElementById('bulk-addMin').value;
+    const time = `${h}:${m}`;
+
+    let count = 0;
+    for (const a of this._bulkAccounts) {
+      if (a.checked && !a.scheduleTimes.includes(time)) {
+        a.scheduleTimes.push(time);
+        a.scheduleTimes.sort();
+        count++;
+      }
+    }
+    this.renderBulkSchedule();
+    if (count === 0) alert('選択中のアカウントには既に追加済みです');
+  },
+
+  bulkRemoveTime() {
+    const h = document.getElementById('bulk-addHour').value.padStart(2, '0');
+    const m = document.getElementById('bulk-addMin').value;
+    const time = `${h}:${m}`;
+
+    for (const a of this._bulkAccounts) {
+      if (a.checked) {
+        a.scheduleTimes = a.scheduleTimes.filter(t => t !== time);
+      }
+    }
+    this.renderBulkSchedule();
+  },
+
+  bulkRemoveSingleTime(idx, time) {
+    this._bulkAccounts[idx].scheduleTimes = this._bulkAccounts[idx].scheduleTimes.filter(t => t !== time);
+    this.renderBulkSchedule();
+  },
+
+  async bulkSave() {
+    for (const a of this._bulkAccounts) {
+      await this.api(`/accounts/${a.id}`, 'PUT', { scheduleTimes: a.scheduleTimes });
+    }
+    this.closeModal('modal-bulk-schedule');
+    this.loadAccounts();
+    alert('全アカウントのスケジュールを保存しました');
+  },
+
   // === 設定 ===
   async loadSettings() {
     const settings = await this.api('/settings');
