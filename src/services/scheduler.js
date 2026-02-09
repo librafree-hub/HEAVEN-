@@ -8,35 +8,10 @@ const poster = require('./cityhaven-poster');
 
 class Scheduler {
   constructor() {
-    this.jobs = [];
+    this.job = null;
     this.running = false;
     this.status = { lastRun: null, nextRun: null, isRunning: false };
-  }
-
-  // スケジュール設定からcron式を生成
-  _buildCronExpression(settings) {
-    const startHour = settings.scheduleStartHour ?? 0;
-    const endHour = settings.scheduleEndHour ?? 23;
-    const interval = settings.scheduleInterval ?? 3;
-
-    // 24時間の場合
-    if (startHour === 0 && endHour === 23) {
-      return `0 0 */${interval} * * *`;
-    }
-    // 時間帯指定
-    return `0 0 ${startHour}-${endHour}/${interval} * * *`;
-  }
-
-  // 次回の投稿予定時刻を計算
-  _calcNextPostTimes(settings) {
-    const startHour = settings.scheduleStartHour ?? 0;
-    const endHour = settings.scheduleEndHour ?? 23;
-    const interval = settings.scheduleInterval ?? 3;
-    const hours = [];
-    for (let h = startHour; h <= endHour; h += interval) {
-      hours.push(h);
-    }
-    return hours;
+    this._postedThisMinute = new Set(); // 同じ分に重複投稿しない
   }
 
   // アカウント設定を読み込む
@@ -52,6 +27,19 @@ class Scheduler {
     const settingsPath = path.join(__dirname, '../../config/settings.json');
     if (!fs.existsSync(settingsPath)) return {};
     return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+  }
+
+  // 現在時刻(HH:MM)が投稿時刻リストに含まれるか
+  _shouldPostNow(account) {
+    const times = account.scheduleTimes;
+    if (!times || times.length === 0) return false;
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(Math.floor(now.getMinutes() / 10) * 10).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+
+    return times.includes(currentTime);
   }
 
   // 1アカウント分の投稿処理
@@ -93,7 +81,6 @@ class Scheduler {
       // 投稿オプション決定
       const postOptions = {};
 
-      // 投稿タイプ: diary / freepost / random
       const postTypeSetting = account.postType || settings.postType || 'diary';
       if (postTypeSetting === 'random') {
         postOptions.postType = Math.random() < 0.5 ? 'diary' : 'freepost';
@@ -101,7 +88,6 @@ class Scheduler {
         postOptions.postType = postTypeSetting;
       }
 
-      // 公開範囲: public / mygirl / random
       const visibilitySetting = account.visibility || settings.visibility || 'public';
       if (visibilitySetting === 'random') {
         postOptions.visibility = Math.random() < 0.5 ? 'public' : 'mygirl';
@@ -148,7 +134,7 @@ class Scheduler {
     }
   }
 
-  // 全アカウント投稿（1回実行）
+  // 全アカウント投稿（1回実行 - 手動用）
   async runOnce() {
     if (this.status.isRunning) {
       return { error: '既に実行中です' };
@@ -159,21 +145,24 @@ class Scheduler {
     const accounts = this._loadAccounts();
     const results = [];
 
-    console.log(`\n🚀 投稿開始: ${accounts.length}アカウント`);
+    console.log(`\n🚀 手動投稿開始: ${accounts.length}アカウント`);
 
     for (const account of accounts) {
       const todayPosts = database.getTodayPosts()
         .filter(p => p.accountId === account.id && p.status === 'success');
 
-      if (todayPosts.length >= (account.postsPerDay || 3)) {
-        console.log(`  ⏭️ ${account.name}: 今日の投稿上限到達（${todayPosts.length}件）`);
+      const maxPosts = (account.scheduleTimes && account.scheduleTimes.length > 0)
+        ? account.scheduleTimes.length
+        : (account.postsPerDay || 3);
+
+      if (todayPosts.length >= maxPosts) {
+        console.log(`  ⏭️ ${account.name}: 今日の投稿上限到達（${todayPosts.length}/${maxPosts}件）`);
         continue;
       }
 
       const result = await this.postForAccount(account);
       results.push({ account: account.name, ...result });
 
-      // アカウント間に間隔を空ける（2〜5分）
       if (accounts.indexOf(account) < accounts.length - 1) {
         const waitMin = 2 + Math.random() * 3;
         console.log(`  ⏳ 次のアカウントまで${waitMin.toFixed(1)}分待機...`);
@@ -186,6 +175,48 @@ class Scheduler {
     return { results };
   }
 
+  // スケジュールチェック（毎分実行）
+  async _checkSchedule() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(Math.floor(now.getMinutes() / 10) * 10).padStart(2, '0');
+    const timeKey = `${hh}:${mm}`;
+
+    // 10分区切りの先頭でリセット
+    if (now.getMinutes() % 10 === 0) {
+      this._postedThisMinute = new Set();
+    }
+
+    const accounts = this._loadAccounts();
+
+    for (const account of accounts) {
+      if (!this._shouldPostNow(account)) continue;
+
+      const postKey = `${account.id}_${timeKey}`;
+      if (this._postedThisMinute.has(postKey)) continue;
+
+      // 今日の投稿数チェック
+      const todayPosts = database.getTodayPosts()
+        .filter(p => p.accountId === account.id && p.status === 'success');
+      const maxPosts = account.scheduleTimes ? account.scheduleTimes.length : (account.postsPerDay || 3);
+      if (todayPosts.length >= maxPosts) continue;
+
+      this._postedThisMinute.add(postKey);
+
+      console.log(`\n⏰ スケジュール投稿: ${account.name} (${timeKey})`);
+      this.status.isRunning = true;
+      this.status.lastRun = new Date().toISOString();
+
+      await this.postForAccount(account);
+
+      this.status.isRunning = false;
+
+      // 複数アカウントが同時刻の場合、間隔を空ける
+      const waitSec = 30 + Math.random() * 60;
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+    }
+  }
+
   // 単一アカウント投稿
   async runSingle(accountId) {
     const accounts = this._loadAccounts();
@@ -194,43 +225,49 @@ class Scheduler {
     return this.postForAccount(account);
   }
 
-  // スケジュール開始
+  // スケジューラー開始 - 毎分チェック
   start() {
-    const settings = this._loadSettings();
-    // 新形式（時間帯+間隔）があればそこからcron生成、なければ旧形式フォールバック
-    const cronExpression = (settings.scheduleInterval != null)
-      ? this._buildCronExpression(settings)
-      : (settings.schedule || '0 0 */3 * * *');
-
     this.stop();
 
-    const job = cron.schedule(cronExpression, async () => {
-      console.log(`\n⏰ スケジュール実行: ${new Date().toLocaleString('ja-JP')}`);
-      await this.runOnce();
+    this.job = cron.schedule('* * * * *', async () => {
+      try {
+        await this._checkSchedule();
+      } catch (e) {
+        console.error('スケジュールチェックエラー:', e.message);
+      }
     });
 
-    this.jobs.push(job);
     this.running = true;
-    const postHours = this._calcNextPostTimes(settings);
-    this.status.nextRun = '次のスケジュール時刻';
-    this.status.postHours = postHours;
-    console.log(`📅 スケジューラー開始: ${cronExpression}`);
-    console.log(`   投稿予定時刻: ${postHours.map(h => h + '時').join(', ')}`);
+
+    // 登録済み時刻の表示
+    const accounts = this._loadAccounts();
+    console.log(`📅 スケジューラー開始（毎分チェック）`);
+    for (const a of accounts) {
+      if (a.scheduleTimes && a.scheduleTimes.length > 0) {
+        console.log(`   ${a.name}: ${a.scheduleTimes.join(', ')}`);
+      }
+    }
   }
 
-  // スケジュール停止
+  // スケジューラー停止
   stop() {
-    for (const job of this.jobs) {
-      job.stop();
+    if (this.job) {
+      this.job.stop();
+      this.job = null;
     }
-    this.jobs = [];
     this.running = false;
   }
 
   getStatus() {
+    const accounts = this._loadAccounts();
+    const schedules = accounts
+      .filter(a => a.scheduleTimes && a.scheduleTimes.length > 0)
+      .map(a => ({ name: a.name, times: a.scheduleTimes }));
+
     return {
       running: this.running,
-      ...this.status
+      ...this.status,
+      schedules
     };
   }
 }

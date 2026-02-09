@@ -468,58 +468,42 @@ body {
   align-items: center;
 }
 
-/* スケジュール設定 */
-.schedule-presets {
+/* スケジュール時刻設定 */
+.schedule-times-list {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  min-height: 32px;
 }
 
-.preset-btn {
-  background: var(--bg) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text-muted) !important;
-  transition: all 0.2s;
-}
-
-.preset-btn.active {
-  background: var(--primary) !important;
-  border-color: var(--primary) !important;
-  color: #fff !important;
-}
-
-.schedule-preview {
-  margin-top: 12px;
-}
-
-.schedule-preview label {
-  display: block;
+.schedule-time-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(124, 92, 252, 0.15);
+  border: 1px solid var(--primary);
+  border-radius: 16px;
   font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.hour-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 4px;
-}
-
-.hour-cell {
-  text-align: center;
-  padding: 6px 2px;
-  border-radius: 4px;
-  font-size: 11px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-
-.hour-cell.active {
-  background: rgba(124, 92, 252, 0.25);
-  border-color: var(--primary);
   color: var(--primary);
   font-weight: 600;
+}
+
+.schedule-time-tag .remove-time {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.schedule-times-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
 }
 
 /* レスポンシブ */
@@ -531,8 +515,7 @@ body {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
   .content { padding: 16px; }
-  .hour-grid { grid-template-columns: repeat(8, 1fr); }
-  .schedule-presets { flex-wrap: wrap; }
+  .schedule-time-picker .form-grid { grid-template-columns: 1fr; }
 }
 
 /* 投稿プレビュー */

@@ -75,7 +75,8 @@ router.post('/accounts', (req, res) => {
     loginUrl: req.body.loginUrl || '',
     loginId: req.body.loginId || '',
     loginPassword: req.body.loginPassword || '',
-    diaryUrl: req.body.diaryUrl || ''
+    diaryUrl: req.body.diaryUrl || '',
+    scheduleTimes: req.body.scheduleTimes || []
   };
   accounts.push(account);
   saveAccounts(accounts);
@@ -205,10 +206,7 @@ router.get('/settings', (req, res) => {
       res.json({
         minChars: 450,
         maxChars: 1000,
-        postingEnabled: false,
-        scheduleStartHour: 0,
-        scheduleEndHour: 23,
-        scheduleInterval: 3
+        postingEnabled: false
       });
     }
   } catch (e) {

@@ -129,6 +129,38 @@
               </div>
 
               <hr>
+              <h4>投稿スケジュール</h4>
+              <small>この子の投稿時刻を設定（10分単位で指定可能）</small>
+
+              <div class="schedule-time-picker" style="margin-top:12px;">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>時刻を追加</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <select id="acc-addHour" style="width:auto;">
+                        <option value="0">0</option><option value="1">1</option><option value="2">2</option>
+                        <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                        <option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                        <option value="9">9</option><option value="10">10</option><option value="11">11</option>
+                        <option value="12">12</option><option value="13">13</option><option value="14">14</option>
+                        <option value="15">15</option><option value="16">16</option><option value="17">17</option>
+                        <option value="18">18</option><option value="19">19</option><option value="20">20</option>
+                        <option value="21">21</option><option value="22">22</option><option value="23">23</option>
+                      </select>
+                      <span>時</span>
+                      <select id="acc-addMin" style="width:auto;">
+                        <option value="00">00</option><option value="10">10</option><option value="20">20</option>
+                        <option value="30">30</option><option value="40">40</option><option value="50">50</option>
+                      </select>
+                      <span>分</span>
+                      <button type="button" class="btn btn-sm btn-primary" onclick="App.addScheduleTime()">追加</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="acc-scheduleTimes" class="schedule-times-list"></div>
+              </div>
+
+              <hr>
               <h4>投稿オプション</h4>
 
               <div class="form-grid">
@@ -201,62 +233,7 @@
 
           <div class="card">
             <h3>スケジュール</h3>
-
-            <div class="form-group">
-              <label>投稿時間帯</label>
-              <div class="schedule-presets">
-                <button type="button" class="btn btn-sm preset-btn" data-preset="24h" onclick="App.setSchedulePreset('24h')">24時間</button>
-                <button type="button" class="btn btn-sm preset-btn" data-preset="daytime" onclick="App.setSchedulePreset('daytime')">朝〜夜 (8-23時)</button>
-                <button type="button" class="btn btn-sm preset-btn" data-preset="custom" onclick="App.setSchedulePreset('custom')">カスタム</button>
-              </div>
-            </div>
-
-            <div id="schedule-custom-range" class="form-grid" style="display:none;">
-              <div class="form-group">
-                <label>開始時刻</label>
-                <select id="set-startHour">
-                  <option value="0">0時</option><option value="1">1時</option><option value="2">2時</option>
-                  <option value="3">3時</option><option value="4">4時</option><option value="5">5時</option>
-                  <option value="6">6時</option><option value="7">7時</option><option value="8">8時</option>
-                  <option value="9">9時</option><option value="10">10時</option><option value="11">11時</option>
-                  <option value="12">12時</option><option value="13">13時</option><option value="14">14時</option>
-                  <option value="15">15時</option><option value="16">16時</option><option value="17">17時</option>
-                  <option value="18">18時</option><option value="19">19時</option><option value="20">20時</option>
-                  <option value="21">21時</option><option value="22">22時</option><option value="23">23時</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>終了時刻</label>
-                <select id="set-endHour">
-                  <option value="0">0時</option><option value="1">1時</option><option value="2">2時</option>
-                  <option value="3">3時</option><option value="4">4時</option><option value="5">5時</option>
-                  <option value="6">6時</option><option value="7">7時</option><option value="8">8時</option>
-                  <option value="9">9時</option><option value="10">10時</option><option value="11">11時</option>
-                  <option value="12">12時</option><option value="13">13時</option><option value="14">14時</option>
-                  <option value="15">15時</option><option value="16">16時</option><option value="17">17時</option>
-                  <option value="18">18時</option><option value="19">19時</option><option value="20">20時</option>
-                  <option value="21">21時</option><option value="22">22時</option><option value="23">23時</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>投稿間隔</label>
-              <select id="set-interval">
-                <option value="1">1時間ごと</option>
-                <option value="2">2時間ごと</option>
-                <option value="3" selected>3時間ごと</option>
-                <option value="4">4時間ごと</option>
-                <option value="6">6時間ごと</option>
-                <option value="8">8時間ごと</option>
-                <option value="12">12時間ごと</option>
-              </select>
-            </div>
-
-            <div class="schedule-preview" id="schedule-preview">
-              <label>投稿予定時刻</label>
-              <div class="hour-grid" id="hour-grid"></div>
-            </div>
+            <small>投稿時刻はアカウントごとに個別設定されます。「アカウント管理」→「編集」から各アカウントの投稿時刻を設定してください。</small>
           </div>
 
           <div class="card">

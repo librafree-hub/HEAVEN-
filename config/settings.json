@@ -1,8 +1,5 @@
 {
   "minChars": 450,
   "maxChars": 1000,
-  "postingEnabled": false,
-  "scheduleStartHour": 0,
-  "scheduleEndHour": 23,
-  "scheduleInterval": 3
+  "postingEnabled": false
 }

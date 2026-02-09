@@ -1,5 +1,6 @@
 const App = {
   currentAccountId: null,
+  _scheduleTimes: [], // 編集中アカウントの投稿時刻リスト
 
   // === 初期化 ===
   async init() {
@@ -46,7 +47,10 @@ const App = {
     const badge = document.getElementById('scheduler-status');
     const btn = document.getElementById('btn-scheduler');
     if (stats.scheduler?.running) {
-      badge.textContent = '稼働中';
+      const schedInfo = (stats.scheduler.schedules || [])
+        .map(s => `${s.name}: ${s.times.join(', ')}`)
+        .join(' | ');
+      badge.textContent = '稼働中' + (schedInfo ? ` (${schedInfo})` : '');
       badge.className = 'status-badge running';
       btn.textContent = 'スケジューラー停止';
     } else {
@@ -79,7 +83,7 @@ const App = {
         <div class="account-meta">
           ${this.esc(a.personality || '')}<br>
           画像: ${a.imageStats.total}枚（残り${a.imageStats.remaining}枚）<br>
-          投稿数/日: ${a.postsPerDay}<br>
+          投稿: ${a.scheduleTimes && a.scheduleTimes.length > 0 ? a.scheduleTimes.join(', ') : `${a.postsPerDay || 3}回/日（時刻未設定）`}<br>
           ${{diary:'写メ日記',freepost:'フリーポスト',random:'ランダム'}[a.postType] || '写メ日記'} / ${{public:'全公開',mygirl:'マイガール',random:'ランダム'}[a.visibility] || '全公開'}
         </div>
         <div class="account-actions">
@@ -96,6 +100,8 @@ const App = {
     document.getElementById('modal-account-title').textContent = 'アカウント追加';
     document.getElementById('acc-id').value = '';
     document.getElementById('form-account').reset();
+    this._scheduleTimes = [];
+    this.renderScheduleTimes();
     document.getElementById('modal-account').style.display = 'flex';
   },
 
@@ -119,6 +125,8 @@ const App = {
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
+    this._scheduleTimes = (a.scheduleTimes || []).slice();
+    this.renderScheduleTimes();
     document.getElementById('modal-account').style.display = 'flex';
   },
 
@@ -138,6 +146,7 @@ const App = {
       diaryUrl: document.getElementById('acc-diaryUrl').value,
       postType: document.getElementById('acc-postType').value,
       visibility: document.getElementById('acc-visibility').value,
+      scheduleTimes: this._scheduleTimes.slice(),
       active: true
     };
 
@@ -277,9 +286,39 @@ const App = {
     return html;
   },
 
-  // === 設定 ===
-  _currentSchedulePreset: '24h',
+  // === スケジュール時刻管理 ===
+  addScheduleTime() {
+    const h = document.getElementById('acc-addHour').value.padStart(2, '0');
+    const m = document.getElementById('acc-addMin').value;
+    const time = `${h}:${m}`;
 
+    if (this._scheduleTimes.includes(time)) {
+      alert(`${time} は既に追加されています`);
+      return;
+    }
+
+    this._scheduleTimes.push(time);
+    this._scheduleTimes.sort();
+    this.renderScheduleTimes();
+  },
+
+  removeScheduleTime(time) {
+    this._scheduleTimes = this._scheduleTimes.filter(t => t !== time);
+    this.renderScheduleTimes();
+  },
+
+  renderScheduleTimes() {
+    const el = document.getElementById('acc-scheduleTimes');
+    if (this._scheduleTimes.length === 0) {
+      el.innerHTML = '<div class="schedule-times-empty">投稿時刻が設定されていません</div>';
+      return;
+    }
+    el.innerHTML = this._scheduleTimes.map(t =>
+      `<span class="schedule-time-tag">${t}<button type="button" class="remove-time" onclick="App.removeScheduleTime('${t}')">&times;</button></span>`
+    ).join('');
+  },
+
+  // === 設定 ===
   async loadSettings() {
     const settings = await this.api('/settings');
     document.getElementById('set-minChars').value = settings.minChars || 450;
@@ -287,75 +326,6 @@ const App = {
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
     document.getElementById('set-postType').value = settings.postType || 'diary';
     document.getElementById('set-visibility').value = settings.visibility || 'public';
-
-    // スケジュール設定の読み込み
-    const startHour = settings.scheduleStartHour ?? 0;
-    const endHour = settings.scheduleEndHour ?? 23;
-    const interval = settings.scheduleInterval ?? 3;
-
-    document.getElementById('set-startHour').value = startHour;
-    document.getElementById('set-endHour').value = endHour;
-    document.getElementById('set-interval').value = interval;
-
-    // プリセット判定
-    if (startHour === 0 && endHour === 23) {
-      this.setSchedulePreset('24h');
-    } else if (startHour === 8 && endHour === 23) {
-      this.setSchedulePreset('daytime');
-    } else {
-      this.setSchedulePreset('custom');
-    }
-
-    // イベントリスナー追加
-    ['set-startHour', 'set-endHour', 'set-interval'].forEach(id => {
-      document.getElementById(id).onchange = () => this.updateSchedulePreview();
-    });
-
-    this.updateSchedulePreview();
-  },
-
-  setSchedulePreset(preset) {
-    this._currentSchedulePreset = preset;
-
-    // ボタン表示更新
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.preset === preset);
-    });
-
-    const customRange = document.getElementById('schedule-custom-range');
-
-    if (preset === '24h') {
-      document.getElementById('set-startHour').value = 0;
-      document.getElementById('set-endHour').value = 23;
-      customRange.style.display = 'none';
-    } else if (preset === 'daytime') {
-      document.getElementById('set-startHour').value = 8;
-      document.getElementById('set-endHour').value = 23;
-      customRange.style.display = 'none';
-    } else {
-      customRange.style.display = '';
-    }
-
-    this.updateSchedulePreview();
-  },
-
-  updateSchedulePreview() {
-    const startHour = parseInt(document.getElementById('set-startHour').value);
-    const endHour = parseInt(document.getElementById('set-endHour').value);
-    const interval = parseInt(document.getElementById('set-interval').value);
-
-    const grid = document.getElementById('hour-grid');
-    let html = '';
-    const activeHours = new Set();
-    for (let h = startHour; h <= endHour; h += interval) {
-      activeHours.add(h);
-    }
-
-    for (let h = 0; h < 24; h++) {
-      const isActive = activeHours.has(h);
-      html += `<div class="hour-cell${isActive ? ' active' : ''}">${h}時</div>`;
-    }
-    grid.innerHTML = html;
   },
 
   async saveSettings(e) {
@@ -363,9 +333,6 @@ const App = {
     const data = {
       minChars: parseInt(document.getElementById('set-minChars').value),
       maxChars: parseInt(document.getElementById('set-maxChars').value),
-      scheduleStartHour: parseInt(document.getElementById('set-startHour').value),
-      scheduleEndHour: parseInt(document.getElementById('set-endHour').value),
-      scheduleInterval: parseInt(document.getElementById('set-interval').value),
       postingEnabled: document.getElementById('set-postingEnabled').checked,
       postType: document.getElementById('set-postType').value,
       visibility: document.getElementById('set-visibility').value
