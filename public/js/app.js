@@ -223,10 +223,10 @@ const App = {
           <span class="mitene-account-name">${this.esc(a.name)}</span>
           <span class="mitene-account-info">
             ${a.loginId ? 'ID設定済' : '<span class="text-danger">ID未設定</span>'}
-            / 毎日 ${this.esc(a.schedule || '未設定')}
+            / 予約: 毎日 ${this.esc(a.schedule || '未設定')}
           </span>
           <span class="mitene-account-status" id="mitene-acc-status-${a.id}"></span>
-          <button class="btn btn-sm btn-mitene" id="mitene-btn-${a.id}" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
+          <button class="btn btn-sm btn-mitene" id="mitene-btn-${a.id}" onclick="App.miteneSingle('${a.id}')">今すぐ送信</button>
           <button class="btn btn-sm btn-secondary" onclick="App.editMiteneAccount('${a.id}')">編集</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteMiteneAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
         </div>
@@ -344,7 +344,7 @@ const App = {
   },
 
   async miteneSingle(accountId) {
-    if (!confirm('このアカウントでミテネを送信しますか？')) return;
+    if (!confirm('このアカウントで今すぐミテネを送信しますか？')) return;
 
     const btn = document.getElementById(`mitene-btn-${accountId}`);
     const statusEl = document.getElementById(`mitene-acc-status-${accountId}`);
@@ -353,7 +353,7 @@ const App = {
 
     const result = await this.api(`/mitene/send/${accountId}`, 'POST');
 
-    if (btn) { btn.disabled = false; btn.textContent = 'ミテネ送信'; }
+    if (btn) { btn.disabled = false; btn.textContent = '今すぐ送信'; }
 
     if (result.error) {
       if (statusEl) { statusEl.textContent = '失敗'; statusEl.className = 'mitene-account-status failed'; }

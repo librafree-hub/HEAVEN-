@@ -70,12 +70,12 @@ class MiteneSender {
     }
   }
 
-  // ステップ2: トップページで「キテネできる会員を探す」を押す
+  // ステップ2: トップページで「キテネできる会員を探す」「ミテネできる会員を探す」を押す
   async _findMembers(page) {
-    console.log(`  🔍 トップページで「キテネできる会員を探す」を検索中...`);
+    console.log(`  🔍 トップページで「キテネ/ミテネできる会員を探す」を検索中...`);
     await this._screenshot(page, 'mitene-top-page');
 
-    // リンクやボタンを探してクリック
+    // まずリンクやボタンのテキストで探す
     const clicked = await page.evaluate(() => {
       const elements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
       const target = elements.find(el => {
@@ -99,8 +99,8 @@ class MiteneSender {
       return true;
     }
 
-    // 見つからない場合、ページ内のリンク一覧をログ出力
-    console.log(`  ⚠️ ボタンが見つかりません。ページ内のリンクを確認中...`);
+    // 見つからない場合、URLパターンで探す（J10ComeonVisitorList.php）
+    console.log(`  ⚠️ テキストで見つからず。URLパターンで検索中...`);
     const allLinks = await page.evaluate(() => {
       return [...document.querySelectorAll('a')].map(a => ({
         text: (a.textContent || '').trim().substring(0, 60),
@@ -108,9 +108,9 @@ class MiteneSender {
       })).filter(l => l.text.length > 0);
     });
 
-    // URLパターンでも探す（kitene, mitene を含むURL）
+    // J10ComeonVisitorList.php が実際のURL
     const byUrl = allLinks.find(l =>
-      l.href.match(/kitene|mitene|Kitene|Mitene/i)
+      l.href.match(/ComeonVisitor|kitene|mitene/i)
     );
     if (byUrl) {
       console.log(`  📎 URLパターンで発見: ${byUrl.text} → ${byUrl.href}`);
@@ -121,6 +121,7 @@ class MiteneSender {
     }
 
     // デバッグ: 全リンクを出力
+    console.log(`  ❌ ボタンもURLも見つかりません。ページ内のリンク:`);
     for (const l of allLinks.slice(0, 30)) {
       console.log(`    - ${l.text} → ${l.href}`);
     }
@@ -128,88 +129,69 @@ class MiteneSender {
     return false;
   }
 
-  // ステップ3: 「キテネを送る」を押す（最大maxSends回）
+  // 残り回数を読み取る
+  async _getRemainingCount(page) {
+    const remaining = await page.evaluate(() => {
+      const text = document.body.innerText;
+      // 「残り回数: 10/10」「残り回数：8/10」などのパターン
+      const match = text.match(/残り回数[：:]\s*(\d+)\s*[/／]\s*(\d+)/);
+      if (match) {
+        return { remaining: parseInt(match[1]), total: parseInt(match[2]) };
+      }
+      return null;
+    });
+    return remaining;
+  }
+
+  // ステップ3: 「キテネを送る」「ミテネを送る」を1つずつ押す
+  // 実際の流れ: ボタンクリック → confirm("キテネしますか？") → OK → ページに戻る → 次のボタン
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
+    // 残り回数を確認
+    const countInfo = await this._getRemainingCount(page);
+    if (countInfo) {
+      console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total}`);
+      if (countInfo.remaining === 0) {
+        console.log(`  ⚠️ 残り回数が0です。送信できません。`);
+        return { success: false, count: 0, error: '残り回数が0です' };
+      }
+      // 残り回数がmaxSendsより少なければ調整
+      if (countInfo.remaining < maxSends) {
+        maxSends = countInfo.remaining;
+        console.log(`  📊 残り回数に合わせて最大${maxSends}件に調整`);
+      }
+    }
+
     let sentCount = 0;
 
-    // ページ内の送信ボタンを探す
-    // 各会員の横に「キテネを送る」「ミテネを送る」ボタンがあるはず
-    const memberInfo = await page.evaluate((minWeeksVal) => {
-      const results = [];
-      // 送信ボタンを全部取得
-      const buttons = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-      const sendButtons = buttons.filter(b => {
-        const text = (b.textContent || b.value || '').trim();
-        return text.match(/キテネを送る|ミテネを送る|キテネ送信|ミテネ送信|送る/);
-      });
-
-      for (const btn of sendButtons) {
-        // ボタンの親要素周辺から送付済み情報を探す
-        const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div') || btn.parentElement;
-        const parentText = (parent?.textContent || '').trim();
-
-        // 「X月X日に送付済み」パターンを検出
-        const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
-        let sentDate = null;
-        let skipReason = null;
-
-        if (sentMatch && minWeeksVal > 0) {
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = parseInt(sentMatch[1]) - 1;
-          const day = parseInt(sentMatch[2]);
-          sentDate = new Date(year, month, day);
-
-          // 年をまたぐ場合（例：12月の送付を1月に見る）
-          if (sentDate > now) {
-            sentDate = new Date(year - 1, month, day);
-          }
-
-          const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-          if (weeksDiff < minWeeksVal) {
-            skipReason = `${sentMatch[1]}月${sentMatch[2]}日送付済（${Math.floor(weeksDiff)}週間前）`;
-          }
-        }
-
-        results.push({
-          text: (btn.textContent || btn.value || '').trim().substring(0, 30),
-          sentDate: sentDate ? sentDate.toISOString() : null,
-          skipReason
-        });
-      }
-      return results;
-    }, minWeeks);
-
-    console.log(`  📋 送信可能ボタン: ${memberInfo.length}個`);
-
-    // 1つずつクリックして送信
-    for (let i = 0; i < memberInfo.length && sentCount < maxSends; i++) {
-      const info = memberInfo[i];
-
-      if (info.skipReason) {
-        console.log(`  ⏭️ スキップ: ${info.skipReason}`);
-        continue;
-      }
-
+    // 最大maxSends回繰り返す
+    // 毎回ページ上のボタンを新しく探す（送信後ページが更新されるため）
+    for (let attempt = 0; attempt < maxSends; attempt++) {
       try {
-        // ボタンを再取得してクリック（ページ更新対応）
-        const clicked = await page.evaluate((index, minWeeksVal) => {
-          const buttons = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-          const sendButtons = buttons.filter(b => {
-            const text = (b.textContent || b.value || '').trim();
-            return text.match(/キテネを送る|ミテネを送る|キテネ送信|ミテネ送信|送る/);
+        // ページ上の送信ボタン情報を取得
+        const buttonInfo = await page.evaluate((minWeeksVal) => {
+          const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+
+          // 「♡ キテネを送る」「♡ ミテネを送る」「キテネを送る」「ミテネを送る」を探す
+          const sendButtons = allElements.filter(el => {
+            const text = (el.textContent || el.value || '').trim();
+            return text.match(/キテネを送る|ミテネを送る/);
           });
 
-          // スキップ対象を除外してindex番目のボタン
-          let clickIndex = 0;
-          for (const btn of sendButtons) {
-            const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div') || btn.parentElement;
-            const parentText = (parent?.textContent || '').trim();
-            const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
+          if (sendButtons.length === 0) return { found: false, total: 0 };
 
+          // スキップ判定付きで最初のクリック可能なボタンを探す
+          for (const btn of sendButtons) {
+            // 親要素から送付済み情報を確認
+            const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div.member') || btn.closest('div') || btn.parentElement;
+            const parentText = (parent?.textContent || '').trim();
+
+            // 「X月X日に送付済み」パターンを検出
+            const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
             let shouldSkip = false;
+            let skipReason = null;
+
             if (sentMatch && minWeeksVal > 0) {
               const now = new Date();
               const year = now.getFullYear();
@@ -218,46 +200,88 @@ class MiteneSender {
               let sentDate = new Date(year, month, day);
               if (sentDate > now) sentDate = new Date(year - 1, month, day);
               const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-              if (weeksDiff < minWeeksVal) shouldSkip = true;
+              if (weeksDiff < minWeeksVal) {
+                shouldSkip = true;
+                skipReason = `${sentMatch[1]}月${sentMatch[2]}日送付済（${Math.floor(weeksDiff)}週間前）`;
+              }
             }
 
-            if (shouldSkip) continue;
-
-            if (clickIndex === index) {
+            if (!shouldSkip) {
+              // クリック実行
               btn.click();
-              return true;
+              return {
+                found: true,
+                clicked: true,
+                total: sendButtons.length,
+                text: (btn.textContent || btn.value || '').trim().substring(0, 30)
+              };
+            } else {
+              return {
+                found: true,
+                clicked: false,
+                skipped: true,
+                skipReason,
+                total: sendButtons.length
+              };
             }
-            clickIndex++;
           }
-          return false;
-        }, sentCount, minWeeks);
 
-        if (clicked) {
-          sentCount++;
-          console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
+          // 全部スキップ対象だった
+          return { found: true, clicked: false, allSkipped: true, total: sendButtons.length };
+        }, minWeeks);
+
+        if (!buttonInfo.found) {
+          console.log(`  📋 送信ボタンが見つかりません。送信完了またはページ構造変更。`);
+          break;
+        }
+
+        if (buttonInfo.allSkipped) {
+          console.log(`  ⏭️ 残りのボタンは全てスキップ対象です。`);
+          break;
+        }
+
+        if (buttonInfo.skipped) {
+          console.log(`  ⏭️ スキップ: ${buttonInfo.skipReason}`);
+          // スキップしたボタンを除外するためにページを操作する必要があるが、
+          // 実際にはスキップ対象は先頭から順に出てくるので、次のループで同じボタンを見つけてしまう
+          // → スキップ対象がある場合はbreak
+          break;
+        }
+
+        if (buttonInfo.clicked) {
+          // confirm("キテネしますか？") ダイアログは page.on('dialog') で自動承認される
+          // ダイアログ処理 + ページ遷移を待つ
+          console.log(`  ⏳ 確認ダイアログ待機中...`);
           await this._wait(3000);
 
-          // 確認ダイアログが出る場合
-          const confirmClicked = await page.evaluate(() => {
-            const btns = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
-            const confirmBtn = btns.find(b => {
-              const text = (b.textContent || b.value || '').trim();
-              return text.match(/OK|はい|確定|送信|実行/);
-            });
-            if (confirmBtn) {
-              confirmBtn.click();
-              return true;
-            }
-            return false;
-          });
-
-          if (confirmClicked) {
-            console.log(`  🔘 確認ボタンクリック`);
-            await this._wait(2000);
+          // ダイアログ後、ページが会員リストに戻るのを待つ
+          try {
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
+          } catch (e) {
+            // ナビゲーションが発生しない場合もある
           }
+          await this._wait(2000);
+
+          sentCount++;
+          console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends} (残りボタン: ${buttonInfo.total}個)`);
+
+          // 送信後の残り回数を確認
+          const afterCount = await this._getRemainingCount(page);
+          if (afterCount) {
+            console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total}`);
+            if (afterCount.remaining === 0) {
+              console.log(`  🏁 残り回数が0になりました。`);
+              break;
+            }
+          }
+
+          await this._screenshot(page, `mitene-sent-${sentCount}`);
         }
       } catch (e) {
         console.log(`  ⚠️ 送信${sentCount + 1}件目でエラー: ${e.message}`);
+        await this._screenshot(page, 'mitene-send-error');
+        // エラーでも続行を試みる
+        await this._wait(2000);
       }
     }
 
@@ -275,7 +299,7 @@ class MiteneSender {
       const browser = await this._launchBrowser();
       page = await browser.newPage();
 
-      // ダイアログ自動承認
+      // ダイアログ自動承認（「キテネしますか？」「ミテネしますか？」にOKを押す）
       page.on('dialog', async dialog => {
         console.log(`  💬 ダイアログ: ${dialog.message()}`);
         await dialog.accept();
@@ -290,9 +314,9 @@ class MiteneSender {
 
       // ステップ2: 「キテネできる会員を探す」をクリック
       const found = await this._findMembers(page);
-      if (!found) return { success: false, error: '「キテネできる会員を探す」が見つかりません' };
+      if (!found) return { success: false, error: '「キテネ/ミテネできる会員を探す」が見つかりません' };
 
-      // ステップ3: 会員に送信（最大10件）
+      // ステップ3: 会員に1人ずつ送信（ボタンクリック→確認ダイアログOK→ページに戻る→繰り返し）
       const result = await this._sendToMembers(page, maxSends, minWeeks);
 
       console.log(`  🏁 送信完了: ${result.count}件`);

@@ -103,7 +103,7 @@
 
         <!-- 操作ボタン -->
         <div class="action-bar">
-          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
+          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">今すぐ全員送信</button>
           <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
           <span id="mitene-scheduler-status" class="status-badge">停止中</span>
         </div>
@@ -131,15 +131,15 @@
             <div class="guide-step">
               <span class="guide-num">2</span>
               <div>
-                <strong>手動テスト</strong>
-                <p>アカウント横の「ミテネ送信」をクリック。コンソールログで動作確認</p>
+                <strong>今すぐ実行</strong>
+                <p>アカウント横の「今すぐ送信」で即実行。自動でログイン→10件送信</p>
               </div>
             </div>
             <div class="guide-step">
               <span class="guide-num">3</span>
               <div>
-                <strong>自動化</strong>
-                <p>「スケジューラー開始」で各アカウントの設定時刻に毎日自動送信（10件ずつ）</p>
+                <strong>時間指定で自動化</strong>
+                <p>「スケジューラー開始」で各アカウントの設定時刻に毎日自動送信</p>
               </div>
             </div>
           </div>
