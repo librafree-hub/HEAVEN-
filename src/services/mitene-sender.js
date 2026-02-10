@@ -144,13 +144,34 @@ class MiteneSender {
   }
 
   // ステップ3: 「キテネを送る」「ミテネを送る」を1つずつ押す
-  // 実際の流れ: ボタンクリック → confirm("キテネしますか？") → OK → 客のページに飛ぶ → 会員リストに戻る → 次のボタン
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
     // 会員リストのURLを保存（送信後に戻るため）
     const memberListUrl = page.url();
     console.log(`  📍 会員リストURL: ${memberListUrl}`);
+
+    // まずページ上のボタン構造をデバッグ出力
+    const debugInfo = await page.evaluate(() => {
+      const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+      const matched = allElements.filter(el => {
+        const text = (el.textContent || el.value || '').trim();
+        return text.match(/キテネ|ミテネ|送る/);
+      });
+      return matched.map(el => ({
+        tag: el.tagName,
+        text: (el.textContent || el.value || '').trim().substring(0, 50),
+        href: el.href || null,
+        onclick: el.getAttribute('onclick') || null,
+        className: el.className || null,
+        html: el.outerHTML.substring(0, 300)
+      }));
+    });
+    console.log(`  🔍 ボタン構造デバッグ (${debugInfo.length}個):`);
+    for (const d of debugInfo) {
+      console.log(`    [${d.tag}] text="${d.text}" href="${d.href}" onclick="${d.onclick}" class="${d.className}"`);
+      console.log(`    HTML: ${d.html}`);
+    }
 
     // 残り回数を確認
     const countInfo = await this._getRemainingCount(page);
@@ -167,30 +188,24 @@ class MiteneSender {
     }
 
     let sentCount = 0;
-    let skippedCount = 0;
 
-    // 最大maxSends回繰り返す
-    for (let attempt = 0; attempt < maxSends + skippedCount && sentCount < maxSends; attempt++) {
+    for (let attempt = 0; attempt < maxSends; attempt++) {
       try {
-        // ページ上の送信ボタン情報を取得（クリックはまだしない）
-        const buttonInfo = await page.evaluate((minWeeksVal, skipCount) => {
+        // ボタンのhrefを取得（<a>の場合、hrefを直接使ってページ遷移を防ぐ）
+        const btnData = await page.evaluate((minWeeksVal) => {
           const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-
           const sendButtons = allElements.filter(el => {
             const text = (el.textContent || el.value || '').trim();
             return text.match(/キテネを送る|ミテネを送る/);
           });
 
-          if (sendButtons.length === 0) return { found: false, total: 0 };
+          if (sendButtons.length === 0) return null;
 
-          let checkedIndex = 0;
           for (const btn of sendButtons) {
             const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div.member') || btn.closest('div') || btn.parentElement;
             const parentText = (parent?.textContent || '').trim();
-
             const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
             let shouldSkip = false;
-            let skipReason = null;
 
             if (sentMatch && minWeeksVal > 0) {
               const now = new Date();
@@ -200,94 +215,83 @@ class MiteneSender {
               let sentDate = new Date(year, month, day);
               if (sentDate > now) sentDate = new Date(year - 1, month, day);
               const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-              if (weeksDiff < minWeeksVal) {
-                shouldSkip = true;
-                skipReason = `${sentMatch[1]}月${sentMatch[2]}日送付済（${Math.floor(weeksDiff)}週間前）`;
+              if (weeksDiff < minWeeksVal) shouldSkip = true;
+            }
+
+            if (!shouldSkip) {
+              // hrefを奪い取ってページ遷移を防止
+              const href = btn.href || null;
+              const onclick = btn.getAttribute('onclick') || null;
+              if (btn.tagName === 'A') {
+                btn.removeAttribute('href');
               }
+              return {
+                href,
+                onclick,
+                tag: btn.tagName,
+                text: (btn.textContent || '').trim().substring(0, 30),
+                total: sendButtons.length
+              };
             }
-
-            if (shouldSkip) {
-              checkedIndex++;
-              continue;
-            }
-
-            // クリック可能なボタン発見 → hrefを取得（<a>タグの場合）
-            const href = btn.tagName === 'A' ? btn.href : null;
-            return {
-              found: true,
-              clickable: true,
-              href,
-              total: sendButtons.length,
-              index: checkedIndex,
-              text: (btn.textContent || btn.value || '').trim().substring(0, 30)
-            };
           }
+          return { allSkipped: true };
+        }, minWeeks);
 
-          return { found: true, clickable: false, allSkipped: true, total: sendButtons.length };
-        }, minWeeks, skippedCount);
-
-        if (!buttonInfo.found) {
-          console.log(`  📋 送信ボタンが見つかりません。送信完了。`);
+        if (!btnData) {
+          console.log(`  📋 送信ボタンなし。完了。`);
+          break;
+        }
+        if (btnData.allSkipped) {
+          console.log(`  ⏭️ 全てスキップ対象。`);
           break;
         }
 
-        if (buttonInfo.allSkipped) {
-          console.log(`  ⏭️ 残りのボタンは全てスキップ対象です。`);
-          break;
-        }
+        console.log(`  🖱️ 「${btnData.text}」(${btnData.tag}) href=${btnData.href} onclick=${btnData.onclick}`);
 
-        if (buttonInfo.clickable) {
-          // ボタンをクリック（evaluate内でクリック → confirmダイアログ → 客のページに飛ぶ）
-          console.log(`  🖱️ 「${buttonInfo.text}」をクリック (${sentCount + 1}/${maxSends})`);
+        // hrefを除去したボタンをクリック → onclickのみ発火（confirm + 送信処理）
+        await page.evaluate(() => {
+          const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+          const btn = allElements.find(el => {
+            const text = (el.textContent || el.value || '').trim();
+            return text.match(/キテネを送る|ミテネを送る/) && !el.href;
+          });
+          if (btn) btn.click();
+        });
 
-          // クリック前にnavigation待機を設定
-          const navigationPromise = page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+        // confirm ダイアログは page.on('dialog') で自動承認
+        await this._wait(3000);
 
-          // ボタンをクリック
-          await page.evaluate((idx) => {
-            const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-            const sendButtons = allElements.filter(el => {
-              const text = (el.textContent || el.value || '').trim();
-              return text.match(/キテネを送る|ミテネを送る/);
-            });
-            if (sendButtons[idx]) sendButtons[idx].click();
-          }, buttonInfo.index);
-
-          // confirm("キテネしますか？") は page.on('dialog') で自動承認
-          // その後、客のページに飛ぶのを待つ
-          await navigationPromise;
-          await this._wait(1000);
-
-          const afterUrl = page.url();
-          console.log(`  📍 遷移先: ${afterUrl}`);
-
-          sentCount++;
-          console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
-
-          // 会員リストに戻る
+        // ナビゲーションが発生した場合（客ページに飛んだ場合）→ 会員リストに戻る
+        const currentUrl = page.url();
+        if (currentUrl !== memberListUrl) {
+          console.log(`  📍 遷移検知: ${currentUrl}`);
           console.log(`  🔙 会員リストに戻る...`);
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
+        }
 
-          // 残り回数を確認
-          const afterCount = await this._getRemainingCount(page);
-          if (afterCount) {
-            console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total}`);
-            if (afterCount.remaining === 0) {
-              console.log(`  🏁 残り回数が0になりました。`);
-              break;
-            }
+        sentCount++;
+        console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
+
+        // 残り回数を確認
+        const afterCount = await this._getRemainingCount(page);
+        if (afterCount) {
+          console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total}`);
+          if (afterCount.remaining === 0) {
+            console.log(`  🏁 残り回数0。`);
+            break;
           }
         }
+
+        await this._screenshot(page, `mitene-sent-${sentCount}`);
       } catch (e) {
-        console.log(`  ⚠️ 送信${sentCount + 1}件目でエラー: ${e.message}`);
+        console.log(`  ⚠️ 送信${sentCount + 1}件目エラー: ${e.message}`);
         await this._screenshot(page, 'mitene-send-error');
-        // エラー時も会員リストに戻って続行
         try {
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
         } catch (navErr) {
-          console.log(`  ❌ 会員リストへの復帰失敗: ${navErr.message}`);
+          console.log(`  ❌ 復帰失敗: ${navErr.message}`);
           break;
         }
       }
