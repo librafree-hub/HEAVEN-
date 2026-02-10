@@ -5,19 +5,14 @@ const database = require('./database');
 const imageManager = require('./image-manager');
 const aiGenerator = require('./ai-generator');
 const poster = require('./cityhaven-poster');
-const miteneSender = require('./mitene-sender');
 
 class Scheduler {
   constructor() {
     this.jobs = [];
-    this.miteneJobs = [];
     this.running = false;
-    this.miteneRunning = false;
     this.status = { lastRun: null, nextRun: null, isRunning: false };
-    this.miteneStatus = { lastRun: null, isRunning: false, lastResult: null };
   }
 
-  // アカウント設定を読み込む
   _loadAccounts() {
     const accountsPath = path.join(__dirname, '../../config/accounts.json');
     if (!fs.existsSync(accountsPath)) return [];
@@ -25,20 +20,17 @@ class Scheduler {
       .filter(a => a.active);
   }
 
-  // 設定を読み込む
   _loadSettings() {
     const settingsPath = path.join(__dirname, '../../config/settings.json');
     if (!fs.existsSync(settingsPath)) return {};
     return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
   }
 
-  // 1アカウント分の投稿処理
   async postForAccount(account) {
     const timestamp = new Date().toLocaleTimeString('ja-JP');
     console.log(`\n⏰ [${timestamp}] 投稿処理開始: ${account.name}`);
 
     try {
-      // 画像選択
       console.log(`  📸 画像選択中...`);
       const image = imageManager.selectImage(account.id);
       if (!image) {
@@ -46,12 +38,10 @@ class Scheduler {
       }
       console.log(`  選択画像: ${image.name}`);
 
-      // AI日記生成
       console.log(`  🤖 AI日記生成中...`);
       const diary = await aiGenerator.generateDiary(account, image.path);
       console.log(`  生成完了: ${diary.charCount}文字 | タイトル: ${diary.title}`);
 
-      // シティヘブンに投稿
       const settings = this._loadSettings();
       if (settings.postingEnabled === false) {
         console.log(`  ⏸️ 投稿無効（テストモード）- 生成のみ完了`);
@@ -68,24 +58,16 @@ class Scheduler {
         return { success: true, mode: 'test', diary };
       }
 
-      // 投稿オプション決定
       const postOptions = {};
-
-      // 投稿タイプ: diary / freepost / random
       const postTypeSetting = account.postType || settings.postType || 'diary';
-      if (postTypeSetting === 'random') {
-        postOptions.postType = Math.random() < 0.5 ? 'diary' : 'freepost';
-      } else {
-        postOptions.postType = postTypeSetting;
-      }
+      postOptions.postType = postTypeSetting === 'random'
+        ? (Math.random() < 0.5 ? 'diary' : 'freepost')
+        : postTypeSetting;
 
-      // 公開範囲: public / mygirl / random
       const visibilitySetting = account.visibility || settings.visibility || 'public';
-      if (visibilitySetting === 'random') {
-        postOptions.visibility = Math.random() < 0.5 ? 'public' : 'mygirl';
-      } else {
-        postOptions.visibility = visibilitySetting;
-      }
+      postOptions.visibility = visibilitySetting === 'random'
+        ? (Math.random() < 0.5 ? 'public' : 'mygirl')
+        : visibilitySetting;
 
       console.log(`  📤 シティヘブンに投稿中... [${postOptions.postType === 'freepost' ? 'フリーポスト' : '写メ日記'} / ${postOptions.visibility === 'mygirl' ? 'マイガール' : '全公開'}]`);
       const result = await poster.post(account, diary, image.path, postOptions);
@@ -103,68 +85,49 @@ class Scheduler {
         message: result.error || ''
       });
 
-      if (result.success) {
-        console.log(`  ✅ ${account.name}: 投稿成功`);
-      } else {
-        console.log(`  ❌ ${account.name}: 投稿失敗 - ${result.error}`);
-      }
-
+      console.log(result.success
+        ? `  ✅ ${account.name}: 投稿成功`
+        : `  ❌ ${account.name}: 投稿失敗 - ${result.error}`);
       return result;
     } catch (e) {
       console.error(`  ❌ ${account.name}: エラー - ${e.message}`);
       database.addPost({
-        accountId: account.id,
-        accountName: account.name,
-        title: '',
-        body: '',
-        charCount: 0,
-        image: '',
-        status: 'failed',
-        message: e.message
+        accountId: account.id, accountName: account.name,
+        title: '', body: '', charCount: 0, image: '',
+        status: 'failed', message: e.message
       });
       return { success: false, error: e.message };
     }
   }
 
-  // 全アカウント投稿（1回実行）
   async runOnce() {
-    if (this.status.isRunning) {
-      return { error: '既に実行中です' };
-    }
-
+    if (this.status.isRunning) return { error: '既に実行中です' };
     this.status.isRunning = true;
     this.status.lastRun = new Date().toISOString();
     const accounts = this._loadAccounts();
     const results = [];
 
     console.log(`\n🚀 投稿開始: ${accounts.length}アカウント`);
-
     for (const account of accounts) {
       const todayPosts = database.getTodayPosts()
         .filter(p => p.accountId === account.id && p.status === 'success');
-
       if (todayPosts.length >= (account.postsPerDay || 3)) {
         console.log(`  ⏭️ ${account.name}: 今日の投稿上限到達（${todayPosts.length}件）`);
         continue;
       }
-
       const result = await this.postForAccount(account);
       results.push({ account: account.name, ...result });
-
-      // アカウント間に間隔を空ける（2〜5分）
       if (accounts.indexOf(account) < accounts.length - 1) {
         const waitMin = 2 + Math.random() * 3;
         console.log(`  ⏳ 次のアカウントまで${waitMin.toFixed(1)}分待機...`);
         await new Promise(r => setTimeout(r, waitMin * 60 * 1000));
       }
     }
-
     this.status.isRunning = false;
     console.log(`\n✅ 全投稿完了`);
     return { results };
   }
 
-  // 単一アカウント投稿
   async runSingle(accountId) {
     const accounts = this._loadAccounts();
     const account = accounts.find(a => a.id === accountId);
@@ -172,165 +135,27 @@ class Scheduler {
     return this.postForAccount(account);
   }
 
-  // === ミテネ機能 ===
-
-  // 1アカウント分のミテネ送信
-  async sendMiteneForAccount(account) {
-    const timestamp = new Date().toLocaleTimeString('ja-JP');
-    console.log(`\n👋 [${timestamp}] ミテネ送信開始: ${account.name}`);
-
-    try {
-      const result = await miteneSender.send(account);
-
-      database.addPost({
-        accountId: account.id,
-        accountName: account.name,
-        title: 'ミテネ送信',
-        body: '',
-        charCount: 0,
-        image: '',
-        postType: 'mitene',
-        status: result.success ? 'success' : 'failed',
-        message: result.success ? `${result.count || 0}件送信` : result.error
-      });
-
-      if (result.success) {
-        console.log(`  ✅ ${account.name}: ミテネ送信成功`);
-      } else {
-        console.log(`  ❌ ${account.name}: ミテネ送信失敗 - ${result.error}`);
-      }
-
-      return result;
-    } catch (e) {
-      console.error(`  ❌ ${account.name}: ミテネエラー - ${e.message}`);
-      database.addPost({
-        accountId: account.id,
-        accountName: account.name,
-        title: 'ミテネ送信',
-        body: '',
-        charCount: 0,
-        image: '',
-        postType: 'mitene',
-        status: 'failed',
-        message: e.message
-      });
-      return { success: false, error: e.message };
-    }
-  }
-
-  // 全アカウントミテネ送信（1回実行）
-  async runMiteneOnce() {
-    if (this.miteneStatus.isRunning) {
-      return { error: '既にミテネ実行中です' };
-    }
-
-    this.miteneStatus.isRunning = true;
-    this.miteneStatus.lastRun = new Date().toISOString();
-    const accounts = this._loadAccounts();
-    const results = [];
-
-    console.log(`\n👋 ミテネ送信開始: ${accounts.length}アカウント`);
-
-    for (const account of accounts) {
-      if (!account.loginId || !account.loginPassword) {
-        console.log(`  ⏭️ ${account.name}: ログイン情報未設定`);
-        continue;
-      }
-
-      const result = await this.sendMiteneForAccount(account);
-      results.push({ account: account.name, ...result });
-
-      // アカウント間に間隔を空ける（1〜3分）
-      if (accounts.indexOf(account) < accounts.length - 1) {
-        const waitMin = 1 + Math.random() * 2;
-        console.log(`  ⏳ 次のアカウントまで${waitMin.toFixed(1)}分待機...`);
-        await new Promise(r => setTimeout(r, waitMin * 60 * 1000));
-      }
-    }
-
-    this.miteneStatus.isRunning = false;
-    this.miteneStatus.lastResult = results;
-    console.log(`\n✅ ミテネ送信完了`);
-    return { results };
-  }
-
-  // 単一アカウントミテネ送信
-  async runMiteneSingle(accountId) {
-    const accounts = this._loadAccounts();
-    const account = accounts.find(a => a.id === accountId);
-    if (!account) return { error: `アカウントが見つかりません: ${accountId}` };
-    return this.sendMiteneForAccount(account);
-  }
-
-  // ミテネスケジュール開始
-  startMitene() {
-    const settings = this._loadSettings();
-    const cronExpression = settings.miteneSchedule || '0 */2 8-23 * * *';
-
-    this.stopMitene();
-
-    const job = cron.schedule(cronExpression, async () => {
-      console.log(`\n👋 ミテネスケジュール実行: ${new Date().toLocaleString('ja-JP')}`);
-      await this.runMiteneOnce();
-    });
-
-    this.miteneJobs.push(job);
-    this.miteneRunning = true;
-    console.log(`📅 ミテネスケジューラー開始: ${cronExpression}`);
-  }
-
-  // ミテネスケジュール停止
-  stopMitene() {
-    for (const job of this.miteneJobs) {
-      job.stop();
-    }
-    this.miteneJobs = [];
-    this.miteneRunning = false;
-  }
-
-  getMiteneStatus() {
-    return {
-      running: this.miteneRunning,
-      ...this.miteneStatus
-    };
-  }
-
-  // === 日記スケジュール ===
-
-  // スケジュール開始
   start() {
     const settings = this._loadSettings();
-    const cronExpression = settings.schedule || '0 */3 8-23 * * *'; // デフォルト: 8時〜23時の間、3時間毎
-
+    const cronExpression = settings.schedule || '0 */3 8-23 * * *';
     this.stop();
-
     const job = cron.schedule(cronExpression, async () => {
       console.log(`\n⏰ スケジュール実行: ${new Date().toLocaleString('ja-JP')}`);
       await this.runOnce();
     });
-
     this.jobs.push(job);
     this.running = true;
-    this.status.nextRun = '次のスケジュール時刻';
     console.log(`📅 スケジューラー開始: ${cronExpression}`);
   }
 
-  // スケジュール停止
   stop() {
-    for (const job of this.jobs) {
-      job.stop();
-    }
+    for (const job of this.jobs) job.stop();
     this.jobs = [];
     this.running = false;
   }
 
   getStatus() {
-    return {
-      running: this.running,
-      miteneRunning: this.miteneRunning,
-      ...this.status,
-      mitene: this.miteneStatus
-    };
+    return { running: this.running, ...this.status };
   }
 }
 

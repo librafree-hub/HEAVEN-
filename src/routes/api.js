@@ -5,6 +5,7 @@ const multer = require('multer');
 const database = require('../services/database');
 const imageManager = require('../services/image-manager');
 const scheduler = require('../services/scheduler');
+const miteneScheduler = require('../services/mitene-scheduler');
 
 const router = express.Router();
 
@@ -17,23 +18,21 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    // 元のファイル名をUTF-8で保持
     const name = Buffer.from(file.originalname, 'latin1').toString('utf8');
     cb(null, name);
   }
 });
 const upload = multer({ storage });
 
-// === ダッシュボード ===
+// === 写メ日記 統計 ===
 
-// 全体統計
 router.get('/stats', (req, res) => {
   const stats = database.getStats();
   const schedulerStatus = scheduler.getStatus();
   res.json({ ...stats, scheduler: schedulerStatus });
 });
 
-// === アカウント管理 ===
+// === 写メ日記 アカウント管理 ===
 
 const ACCOUNTS_PATH = path.join(__dirname, '../../config/accounts.json');
 
@@ -48,7 +47,6 @@ function saveAccounts(accounts) {
   fs.writeFileSync(ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), 'utf-8');
 }
 
-// アカウント一覧
 router.get('/accounts', (req, res) => {
   const accounts = loadAccounts();
   const withStats = accounts.map(a => ({
@@ -59,10 +57,9 @@ router.get('/accounts', (req, res) => {
   res.json(withStats);
 });
 
-// アカウント追加
 router.post('/accounts', (req, res) => {
   const accounts = loadAccounts();
-  const newId = `account_${accounts.length + 1}`;
+  const newId = `account_${Date.now()}`;
   const account = {
     id: newId,
     name: req.body.name || '新規',
@@ -76,35 +73,28 @@ router.post('/accounts', (req, res) => {
     loginId: req.body.loginId || '',
     loginPassword: req.body.loginPassword || '',
     diaryUrl: req.body.diaryUrl || '',
-    miteneUrl: req.body.miteneUrl || ''
+    postType: req.body.postType || 'diary',
+    visibility: req.body.visibility || 'public'
   };
   accounts.push(account);
   saveAccounts(accounts);
-
-  // 画像フォルダも作成
   const dir = imageManager.getAccountDir(newId);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
   res.json(account);
 });
 
-// アカウント更新
 router.put('/accounts/:id', (req, res) => {
   const accounts = loadAccounts();
   const idx = accounts.findIndex(a => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: '見つかりません' });
-
-  // パスワードが***の場合は元の値を保持
   if (req.body.loginPassword === '***') {
     req.body.loginPassword = accounts[idx].loginPassword;
   }
-
   accounts[idx] = { ...accounts[idx], ...req.body };
   saveAccounts(accounts);
   res.json(accounts[idx]);
 });
 
-// アカウント削除
 router.delete('/accounts/:id', (req, res) => {
   let accounts = loadAccounts();
   accounts = accounts.filter(a => a.id !== req.params.id);
@@ -114,14 +104,12 @@ router.delete('/accounts/:id', (req, res) => {
 
 // === 画像管理 ===
 
-// アカウントの画像一覧
 router.get('/accounts/:accountId/images', (req, res) => {
   const images = imageManager.getAccountImages(req.params.accountId);
   const stats = imageManager.getImageStats(req.params.accountId);
   res.json({ images, ...stats });
 });
 
-// 個別画像の配信
 router.get('/accounts/:accountId/images/:filename', (req, res) => {
   const filename = decodeURIComponent(req.params.filename);
   const filePath = path.join(imageManager.getAccountDir(req.params.accountId), filename);
@@ -132,7 +120,6 @@ router.get('/accounts/:accountId/images/:filename', (req, res) => {
   }
 });
 
-// 画像アップロード
 router.post('/accounts/:accountId/images', upload.array('images', 20), (req, res) => {
   res.json({
     success: true,
@@ -141,7 +128,6 @@ router.post('/accounts/:accountId/images', upload.array('images', 20), (req, res
   });
 });
 
-// 画像削除
 router.delete('/accounts/:accountId/images/:filename', (req, res) => {
   const filename = decodeURIComponent(req.params.filename);
   const deleted = imageManager.deleteImage(req.params.accountId, filename);
@@ -163,52 +149,19 @@ router.get('/posts/today', (req, res) => {
   res.json(database.getTodayPosts());
 });
 
-// === 投稿実行 ===
+// === 写メ日記 投稿実行 ===
 
-// 全アカウント投稿
 router.post('/post/all', async (req, res) => {
   res.json({ message: '投稿を開始しました' });
-  // バックグラウンドで実行
   scheduler.runOnce().catch(e => console.error('投稿エラー:', e));
 });
 
-// 単一アカウント投稿
 router.post('/post/:accountId', async (req, res) => {
   const result = await scheduler.runSingle(req.params.accountId);
   res.json(result);
 });
 
-// === ミテネ ===
-
-// ミテネステータス
-router.get('/mitene/status', (req, res) => {
-  res.json(scheduler.getMiteneStatus());
-});
-
-// 全アカウントミテネ送信
-router.post('/mitene/all', async (req, res) => {
-  res.json({ message: 'ミテネ送信を開始しました' });
-  scheduler.runMiteneOnce().catch(e => console.error('ミテネエラー:', e));
-});
-
-// ミテネスケジューラー（:accountIdより先に定義）
-router.post('/mitene/scheduler/start', (req, res) => {
-  scheduler.startMitene();
-  res.json({ success: true, status: scheduler.getMiteneStatus() });
-});
-
-router.post('/mitene/scheduler/stop', (req, res) => {
-  scheduler.stopMitene();
-  res.json({ success: true, status: scheduler.getMiteneStatus() });
-});
-
-// 単一アカウントミテネ送信（パラメータルートは最後）
-router.post('/mitene/send/:accountId', async (req, res) => {
-  const result = await scheduler.runMiteneSingle(req.params.accountId);
-  res.json(result);
-});
-
-// === スケジューラー ===
+// === 写メ日記 スケジューラー ===
 
 router.post('/scheduler/start', (req, res) => {
   scheduler.start();
@@ -224,6 +177,100 @@ router.get('/scheduler/status', (req, res) => {
   res.json(scheduler.getStatus());
 });
 
+// ==========================================
+// === ミテネ（完全に別管理）===
+// ==========================================
+
+const MITENE_ACCOUNTS_PATH = path.join(__dirname, '../../config/mitene-accounts.json');
+
+function loadMiteneAccounts() {
+  if (!fs.existsSync(MITENE_ACCOUNTS_PATH)) return [];
+  return JSON.parse(fs.readFileSync(MITENE_ACCOUNTS_PATH, 'utf-8'));
+}
+
+function saveMiteneAccounts(accounts) {
+  const dir = path.dirname(MITENE_ACCOUNTS_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(MITENE_ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), 'utf-8');
+}
+
+// ミテネアカウント一覧
+router.get('/mitene-accounts', (req, res) => {
+  const accounts = loadMiteneAccounts();
+  const safe = accounts.map(a => ({
+    ...a,
+    loginPassword: a.loginPassword ? '***' : ''
+  }));
+  res.json(safe);
+});
+
+// ミテネアカウント追加
+router.post('/mitene-accounts', (req, res) => {
+  const accounts = loadMiteneAccounts();
+  const newId = `mitene_${Date.now()}`;
+  const account = {
+    id: newId,
+    name: req.body.name || '新規',
+    loginUrl: req.body.loginUrl || '',
+    loginId: req.body.loginId || '',
+    loginPassword: req.body.loginPassword || '',
+    schedule: req.body.schedule || '10:00',
+    active: true
+  };
+  accounts.push(account);
+  saveMiteneAccounts(accounts);
+  res.json(account);
+});
+
+// ミテネアカウント更新
+router.put('/mitene-accounts/:id', (req, res) => {
+  const accounts = loadMiteneAccounts();
+  const idx = accounts.findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: '見つかりません' });
+  if (req.body.loginPassword === '***') {
+    req.body.loginPassword = accounts[idx].loginPassword;
+  }
+  accounts[idx] = { ...accounts[idx], ...req.body };
+  saveMiteneAccounts(accounts);
+  res.json(accounts[idx]);
+});
+
+// ミテネアカウント削除
+router.delete('/mitene-accounts/:id', (req, res) => {
+  let accounts = loadMiteneAccounts();
+  accounts = accounts.filter(a => a.id !== req.params.id);
+  saveMiteneAccounts(accounts);
+  res.json({ success: true });
+});
+
+// ミテネステータス
+router.get('/mitene/status', (req, res) => {
+  res.json(miteneScheduler.getStatus());
+});
+
+// 全アカウントミテネ送信
+router.post('/mitene/all', async (req, res) => {
+  res.json({ message: 'ミテネ送信を開始しました' });
+  miteneScheduler.runAll().catch(e => console.error('ミテネエラー:', e));
+});
+
+// ミテネスケジューラー
+router.post('/mitene/scheduler/start', (req, res) => {
+  miteneScheduler.start();
+  res.json({ success: true, status: miteneScheduler.getStatus() });
+});
+
+router.post('/mitene/scheduler/stop', (req, res) => {
+  miteneScheduler.stop();
+  res.json({ success: true, status: miteneScheduler.getStatus() });
+});
+
+// 単一アカウントミテネ送信（パラメータルートは最後）
+router.post('/mitene/send/:accountId', async (req, res) => {
+  const result = await miteneScheduler.runSingle(req.params.accountId);
+  res.json(result);
+});
+
 // === 設定 ===
 
 const SETTINGS_PATH = path.join(__dirname, '../../config/settings.json');
@@ -234,10 +281,9 @@ router.get('/settings', (req, res) => {
       res.json(JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')));
     } else {
       res.json({
-        minChars: 450,
-        maxChars: 1000,
-        postingEnabled: false,
-        schedule: '0 */3 8-23 * * *'
+        minChars: 450, maxChars: 1000,
+        postingEnabled: false, schedule: '0 */3 8-23 * * *',
+        miteneMaxSends: 10, miteneMinWeeks: 0
       });
     }
   } catch (e) {

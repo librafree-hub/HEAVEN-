@@ -208,25 +208,27 @@ const App = {
   },
 
   // =============================================
-  // === ミテネページ ===
+  // === ミテネページ（完全に別管理）===
   // =============================================
   async loadMitene() {
-    // アカウント一覧
-    const accounts = await this.api('/accounts');
+    // ミテネ専用アカウント一覧
+    const accounts = await this.api('/mitene-accounts');
     const el = document.getElementById('mitene-accounts-list');
 
     if (accounts.length === 0) {
-      el.innerHTML = '<div class="loading">アカウントがありません。「アカウント管理」から追加してください。</div>';
+      el.innerHTML = '<div class="loading">ミテネアカウントがありません。「+ 追加」から女の子を追加してください。</div>';
     } else {
       el.innerHTML = `<div class="mitene-accounts-grid">${accounts.map(a => `
         <div class="mitene-account-row">
           <span class="mitene-account-name">${this.esc(a.name)}</span>
           <span class="mitene-account-info">
             ${a.loginId ? 'ID設定済' : '<span class="text-danger">ID未設定</span>'}
-            ${a.miteneUrl ? ' / URL設定済' : ' / URL自動検出'}
+            / 毎日 ${this.esc(a.schedule || '未設定')}
           </span>
           <span class="mitene-account-status" id="mitene-acc-status-${a.id}"></span>
           <button class="btn btn-sm btn-mitene" id="mitene-btn-${a.id}" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.editMiteneAccount('${a.id}')">編集</button>
+          <button class="btn btn-sm btn-danger" onclick="App.deleteMiteneAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
         </div>
       `).join('')}</div>`;
     }
@@ -276,11 +278,13 @@ const App = {
     // ステータスパネル
     const icon = document.getElementById('mitene-live-icon');
     const liveStatus = document.getElementById('mitene-live-status');
-    const lastRun = document.getElementById('mitene-last-run');
     const todayCount = document.getElementById('mitene-today-count');
 
+    // いずれかのアカウントが実行中か確認
+    const anyRunning = status.accounts && Object.values(status.accounts).some(a => a.isRunning);
+
     if (icon && liveStatus) {
-      if (status.isRunning) {
+      if (anyRunning) {
         icon.className = 'status-panel-icon mitene-color active pulse';
         liveStatus.textContent = '送信中...';
       } else if (status.running) {
@@ -289,15 +293,6 @@ const App = {
       } else {
         icon.className = 'status-panel-icon mitene-color';
         liveStatus.textContent = '停止中';
-      }
-    }
-
-    if (lastRun) {
-      if (status.lastRun) {
-        const d = new Date(status.lastRun);
-        lastRun.textContent = d.toLocaleString('ja-JP');
-      } else {
-        lastRun.textContent = 'まだ実行していません';
       }
     }
 
@@ -393,8 +388,62 @@ const App = {
     await this.updateMitenePanel();
   },
 
+  // === ミテネアカウント管理 ===
+
+  showAddMiteneAccount() {
+    document.getElementById('modal-mitene-title').textContent = 'ミテネアカウント追加';
+    document.getElementById('mitene-acc-id').value = '';
+    document.getElementById('form-mitene-account').reset();
+    document.getElementById('mitene-acc-schedule').value = '10:00';
+    document.getElementById('modal-mitene-account').style.display = 'flex';
+  },
+
+  async editMiteneAccount(id) {
+    const accounts = await this.api('/mitene-accounts');
+    const a = accounts.find(acc => acc.id === id);
+    if (!a) return;
+
+    document.getElementById('modal-mitene-title').textContent = `${a.name} の編集`;
+    document.getElementById('mitene-acc-id').value = a.id;
+    document.getElementById('mitene-acc-name').value = a.name;
+    document.getElementById('mitene-acc-loginUrl').value = a.loginUrl || '';
+    document.getElementById('mitene-acc-loginId').value = a.loginId || '';
+    document.getElementById('mitene-acc-loginPassword').value = '';
+    document.getElementById('mitene-acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み' : 'パスワード';
+    document.getElementById('mitene-acc-schedule').value = a.schedule || '10:00';
+    document.getElementById('modal-mitene-account').style.display = 'flex';
+  },
+
+  async saveMiteneAccount(e) {
+    e.preventDefault();
+    const id = document.getElementById('mitene-acc-id').value;
+    const data = {
+      name: document.getElementById('mitene-acc-name').value,
+      loginUrl: document.getElementById('mitene-acc-loginUrl').value,
+      loginId: document.getElementById('mitene-acc-loginId').value,
+      loginPassword: document.getElementById('mitene-acc-loginPassword').value || '***',
+      schedule: document.getElementById('mitene-acc-schedule').value,
+      active: true
+    };
+
+    if (id) {
+      await this.api(`/mitene-accounts/${id}`, 'PUT', data);
+    } else {
+      await this.api('/mitene-accounts', 'POST', data);
+    }
+
+    this.closeModal('modal-mitene-account');
+    this.loadMitene();
+  },
+
+  async deleteMiteneAccount(id, name) {
+    if (!confirm(`「${name}」をミテネアカウントから削除しますか？`)) return;
+    await this.api(`/mitene-accounts/${id}`, 'DELETE');
+    this.loadMitene();
+  },
+
   // =============================================
-  // === アカウント管理 ===
+  // === 写メ日記 アカウント管理 ===
   // =============================================
   async loadAccounts() {
     const accounts = await this.api('/accounts');
@@ -419,7 +468,6 @@ const App = {
         </div>
         <div class="account-actions">
           <button class="btn btn-sm btn-primary" onclick="App.postSingle('${a.id}')">投稿</button>
-          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
           <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
           <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
@@ -453,7 +501,6 @@ const App = {
     document.getElementById('acc-loginPassword').value = '';
     document.getElementById('acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み（変更する場合のみ入力）' : 'パスワードを入力';
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
-    document.getElementById('acc-miteneUrl').value = a.miteneUrl || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
     document.getElementById('modal-account').style.display = 'flex';
@@ -473,7 +520,6 @@ const App = {
       loginId: document.getElementById('acc-loginId').value,
       loginPassword: document.getElementById('acc-loginPassword').value || '***',
       diaryUrl: document.getElementById('acc-diaryUrl').value,
-      miteneUrl: document.getElementById('acc-miteneUrl').value,
       postType: document.getElementById('acc-postType').value,
       visibility: document.getElementById('acc-visibility').value,
       active: true
@@ -554,8 +600,8 @@ const App = {
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
     document.getElementById('set-postType').value = settings.postType || 'diary';
     document.getElementById('set-visibility').value = settings.visibility || 'public';
-    document.getElementById('set-miteneEnabled').checked = settings.miteneEnabled || false;
-    document.getElementById('set-miteneSchedule').value = settings.miteneSchedule || '0 */2 8-23 * * *';
+    document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 10;
+    document.getElementById('set-miteneMinWeeks').value = settings.miteneMinWeeks || 0;
   },
 
   async saveSettings(e) {
@@ -567,8 +613,8 @@ const App = {
       postingEnabled: document.getElementById('set-postingEnabled').checked,
       postType: document.getElementById('set-postType').value,
       visibility: document.getElementById('set-visibility').value,
-      miteneEnabled: document.getElementById('set-miteneEnabled').checked,
-      miteneSchedule: document.getElementById('set-miteneSchedule').value
+      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 10,
+      miteneMinWeeks: parseInt(document.getElementById('set-miteneMinWeeks').value) || 0
     };
     await this.api('/settings', 'PUT', data);
     alert('設定を保存しました');

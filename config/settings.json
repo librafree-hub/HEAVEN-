@@ -3,6 +3,6 @@
   "maxChars": 1000,
   "postingEnabled": false,
   "schedule": "0 */3 8-23 * * *",
-  "miteneEnabled": false,
-  "miteneSchedule": "0 */2 8-23 * * *"
+  "miteneMaxSends": 10,
+  "miteneMinWeeks": 0
 }

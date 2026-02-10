@@ -40,20 +40,18 @@ class MiteneSender {
     } catch (e) { /* 無視 */ }
   }
 
-  // ログイン（cityhaven-posterと同じ流れ）
+  // ステップ1: 姫デコログイン
   async _login(page, account) {
     const loginUrl = account.loginUrl || 'https://spgirl.cityheaven.net/J1Login.php';
-    console.log(`  🔑 ログイン中: ${loginUrl}`);
+    console.log(`  🔑 姫デコログイン中: ${loginUrl}`);
     await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     await this._wait(2000);
 
     try {
       await page.waitForSelector('#userid', { timeout: 10000 });
       await page.type('#userid', account.loginId, { delay: 50 });
-      console.log(`  ✏️ ID入力完了`);
-
       await page.type('#passwd', account.loginPassword, { delay: 50 });
-      console.log(`  ✏️ パスワード入力完了`);
+      console.log(`  ✏️ ID/パスワード入力完了`);
 
       await page.click('#loginBtn');
       await this._wait(5000);
@@ -72,224 +70,206 @@ class MiteneSender {
     }
   }
 
-  // ミテネページに移動してボタンを押す
-  async _sendMitene(page, account) {
-    try {
-      // ミテネページURL（アカウント設定 or メインページから探す）
-      const miteneUrl = account.miteneUrl || '';
+  // ステップ2: トップページで「キテネできる会員を探す」を押す
+  async _findMembers(page) {
+    console.log(`  🔍 トップページで「キテネできる会員を探す」を検索中...`);
+    await this._screenshot(page, 'mitene-top-page');
 
-      if (miteneUrl) {
-        // 直接URLが設定されている場合
-        console.log(`  📝 ミテネページへ移動: ${miteneUrl}`);
-        await page.goto(miteneUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        await this._wait(3000);
-      } else {
-        // メインページからミテネリンクを探す
-        console.log(`  🔍 メインページからミテネリンクを検索中...`);
-        const mainUrl = 'https://spgirl.cityheaven.net/J1Main.php';
-        await page.goto(mainUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        await this._wait(3000);
-
-        // ミテネ/キテネ関連のリンクを探してクリック
-        const miteneLink = await page.evaluate(() => {
-          const links = Array.from(document.querySelectorAll('a'));
-          const found = links.find(a => {
-            const text = (a.textContent || '').trim();
-            return text.match(/ミテネ|みてね|キテネ|きてね|MITENE|KITENE/i);
-          });
-          if (found) {
-            return found.href;
-          }
-          return null;
-        });
-
-        if (miteneLink) {
-          console.log(`  📎 ミテネリンク発見: ${miteneLink}`);
-          await page.goto(miteneLink, { waitUntil: 'networkidle2', timeout: 30000 });
-          await this._wait(3000);
-        } else {
-          // サイドメニューやナビゲーションからも探す
-          console.log(`  🔍 ナビゲーションからミテネリンクを検索中...`);
-          const allLinks = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('a')).map(a => ({
-              text: (a.textContent || '').trim().substring(0, 50),
-              href: a.href
-            }));
-          });
-          console.log(`  📋 ページ内リンク: ${allLinks.length}個`);
-
-          // URLパターンでもミテネページを探す
-          const miteneByUrl = allLinks.find(l =>
-            l.href.match(/kitene|mitene/i)
-          );
-          if (miteneByUrl) {
-            console.log(`  📎 URLパターンで発見: ${miteneByUrl.href}`);
-            await page.goto(miteneByUrl.href, { waitUntil: 'networkidle2', timeout: 30000 });
-            await this._wait(3000);
-          } else {
-            await this._screenshot(page, 'mitene-not-found');
-            // リンク一覧をログに出力（デバッグ用）
-            for (const l of allLinks.filter(l => l.text.length > 0)) {
-              console.log(`    - ${l.text} → ${l.href}`);
-            }
-            throw new Error('ミテネページが見つかりません。miteneUrlを設定してください');
-          }
-        }
-      }
-
-      await this._screenshot(page, 'mitene-page');
-      console.log(`  📍 ミテネページURL: ${page.url()}`);
-
-      // ページ内のフォーム要素とボタンを検出
-      const pageInfo = await page.evaluate(() => {
-        const forms = Array.from(document.querySelectorAll('form'));
-        const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], a.btn, a[class*="btn"]'));
-        const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-
-        return {
-          forms: forms.length,
-          buttons: buttons.map(b => ({
-            tag: b.tagName,
-            type: b.type || '',
-            text: (b.textContent || b.value || '').trim().substring(0, 50),
-            id: b.id || '',
-            name: b.name || '',
-            className: b.className || ''
-          })),
-          checkboxes: checkboxes.map(c => ({
-            id: c.id || '',
-            name: c.name || '',
-            checked: c.checked,
-            label: c.parentElement?.textContent?.trim().substring(0, 50) || ''
-          }))
-        };
+    // リンクやボタンを探してクリック
+    const clicked = await page.evaluate(() => {
+      const elements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+      const target = elements.find(el => {
+        const text = (el.textContent || el.value || '').trim();
+        return text.includes('キテネできる会員を探す') ||
+               text.includes('ミテネできる会員を探す') ||
+               text.includes('キテネできる会員') ||
+               text.includes('ミテネできる会員');
       });
-
-      console.log(`  📋 ページ要素: フォーム${pageInfo.forms}個, ボタン${pageInfo.buttons.length}個, チェックボックス${pageInfo.checkboxes.length}個`);
-
-      // ミテネ送信ボタンを探してクリック
-      // パターン1: 「ミテネ送信」「一括送信」「送信」などのボタン
-      const result = await page.evaluate(() => {
-        const results = { clicked: 0, details: [] };
-
-        // まず「全選択」「全チェック」ボタンがあれば押す
-        const selectAllBtns = Array.from(document.querySelectorAll('button, input[type="button"], a'));
-        const selectAll = selectAllBtns.find(b => {
-          const text = (b.textContent || b.value || '').trim();
-          return text.match(/全選択|全てチェック|すべて選択|全員|一括チェック/);
-        });
-        if (selectAll) {
-          selectAll.click();
-          results.details.push(`全選択ボタンクリック: "${(selectAll.textContent || selectAll.value || '').trim()}"`);
-        }
-
-        // 全チェックボックスを選択
-        const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-        let checkedCount = 0;
-        for (const cb of checkboxes) {
-          if (!cb.checked && !cb.disabled) {
-            cb.checked = true;
-            cb.dispatchEvent(new Event('change', { bubbles: true }));
-            checkedCount++;
-          }
-        }
-        if (checkedCount > 0) {
-          results.details.push(`チェックボックス選択: ${checkedCount}個`);
-        }
-
-        // 送信ボタンを探す
-        const allBtns = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], a'));
-        const sendBtn = allBtns.find(b => {
-          const text = (b.textContent || b.value || '').trim();
-          return text.match(/ミテネ.*送信|みてね.*送信|送信|一括送信|キテネ.*送信|実行/);
-        });
-
-        if (sendBtn) {
-          sendBtn.click();
-          results.clicked = 1;
-          results.details.push(`送信ボタンクリック: "${(sendBtn.textContent || sendBtn.value || '').trim()}"`);
-        }
-
-        return results;
-      });
-
-      for (const detail of result.details) {
-        console.log(`  🔘 ${detail}`);
+      if (target) {
+        target.click();
+        return (target.textContent || target.value || '').trim().substring(0, 50);
       }
+      return null;
+    });
 
-      if (result.clicked === 0) {
-        // 個別のミテネボタンを探す（各ユーザー横のボタン）
-        console.log(`  🔍 個別ミテネボタンを検索中...`);
-        const individualResult = await page.evaluate(() => {
-          const results = { clicked: 0, details: [] };
-          const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], a'));
-          const miteneButtons = buttons.filter(b => {
-            const text = (b.textContent || b.value || '').trim();
-            return text.match(/ミテネ|みてね|キテネ|きてね|送信/);
-          });
-
-          for (const btn of miteneButtons) {
-            btn.click();
-            results.clicked++;
-            results.details.push(`ボタンクリック: "${(btn.textContent || btn.value || '').trim()}"`);
-          }
-          return results;
-        });
-
-        for (const detail of individualResult.details) {
-          console.log(`  🔘 ${detail}`);
-        }
-        result.clicked += individualResult.clicked;
-      }
-
-      await this._wait(3000);
-
-      // 確認ダイアログ/確認ページの処理
-      const confirmResult = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"]'));
-        const confirmBtn = btns.find(b => {
-          const text = (b.textContent || b.value || '').trim();
-          return text.match(/OK|はい|確定|送信|実行/);
-        });
-        if (confirmBtn) {
-          confirmBtn.click();
-          return (confirmBtn.textContent || confirmBtn.value || '').trim();
-        }
-        return null;
-      });
-
-      if (confirmResult) {
-        console.log(`  🔘 確認ボタンクリック: "${confirmResult}"`);
-        await this._wait(3000);
-      }
-
-      // ダイアログハンドリング（window.confirm等）
-      // Puppeteerのdialogイベントは事前に設定が必要なので、
-      // page作成時に設定する
-
-      await this._screenshot(page, 'mitene-after-send');
-
-      if (result.clicked > 0) {
-        console.log(`  ✅ ミテネ送信完了: ${result.clicked}件`);
-        return { success: true, count: result.clicked };
-      } else {
-        console.log(`  ⚠️ ミテネボタンが見つかりませんでした`);
-        await this._screenshot(page, 'mitene-no-buttons');
-        // ページ構造をログに出力
-        for (const btn of pageInfo.buttons) {
-          console.log(`    ボタン: [${btn.tag}] "${btn.text}" id=${btn.id} name=${btn.name}`);
-        }
-        return { success: false, error: 'ミテネボタンが見つかりませんでした', pageInfo };
-      }
-    } catch (e) {
-      await this._screenshot(page, 'mitene-error');
-      console.error(`  ❌ ミテネ送信失敗: ${e.message}`);
-      return { success: false, error: e.message };
+    if (clicked) {
+      console.log(`  ✅ 「${clicked}」をクリック`);
+      await this._wait(5000);
+      await this._screenshot(page, 'mitene-member-list');
+      return true;
     }
+
+    // 見つからない場合、ページ内のリンク一覧をログ出力
+    console.log(`  ⚠️ ボタンが見つかりません。ページ内のリンクを確認中...`);
+    const allLinks = await page.evaluate(() => {
+      return [...document.querySelectorAll('a')].map(a => ({
+        text: (a.textContent || '').trim().substring(0, 60),
+        href: a.href
+      })).filter(l => l.text.length > 0);
+    });
+
+    // URLパターンでも探す（kitene, mitene を含むURL）
+    const byUrl = allLinks.find(l =>
+      l.href.match(/kitene|mitene|Kitene|Mitene/i)
+    );
+    if (byUrl) {
+      console.log(`  📎 URLパターンで発見: ${byUrl.text} → ${byUrl.href}`);
+      await page.goto(byUrl.href, { waitUntil: 'networkidle2', timeout: 30000 });
+      await this._wait(3000);
+      await this._screenshot(page, 'mitene-member-list');
+      return true;
+    }
+
+    // デバッグ: 全リンクを出力
+    for (const l of allLinks.slice(0, 30)) {
+      console.log(`    - ${l.text} → ${l.href}`);
+    }
+    await this._screenshot(page, 'mitene-search-not-found');
+    return false;
+  }
+
+  // ステップ3: 「キテネを送る」を押す（最大maxSends回）
+  async _sendToMembers(page, maxSends, minWeeks) {
+    console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
+
+    let sentCount = 0;
+
+    // ページ内の送信ボタンを探す
+    // 各会員の横に「キテネを送る」「ミテネを送る」ボタンがあるはず
+    const memberInfo = await page.evaluate((minWeeksVal) => {
+      const results = [];
+      // 送信ボタンを全部取得
+      const buttons = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+      const sendButtons = buttons.filter(b => {
+        const text = (b.textContent || b.value || '').trim();
+        return text.match(/キテネを送る|ミテネを送る|キテネ送信|ミテネ送信|送る/);
+      });
+
+      for (const btn of sendButtons) {
+        // ボタンの親要素周辺から送付済み情報を探す
+        const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div') || btn.parentElement;
+        const parentText = (parent?.textContent || '').trim();
+
+        // 「X月X日に送付済み」パターンを検出
+        const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
+        let sentDate = null;
+        let skipReason = null;
+
+        if (sentMatch && minWeeksVal > 0) {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = parseInt(sentMatch[1]) - 1;
+          const day = parseInt(sentMatch[2]);
+          sentDate = new Date(year, month, day);
+
+          // 年をまたぐ場合（例：12月の送付を1月に見る）
+          if (sentDate > now) {
+            sentDate = new Date(year - 1, month, day);
+          }
+
+          const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
+          if (weeksDiff < minWeeksVal) {
+            skipReason = `${sentMatch[1]}月${sentMatch[2]}日送付済（${Math.floor(weeksDiff)}週間前）`;
+          }
+        }
+
+        results.push({
+          text: (btn.textContent || btn.value || '').trim().substring(0, 30),
+          sentDate: sentDate ? sentDate.toISOString() : null,
+          skipReason
+        });
+      }
+      return results;
+    }, minWeeks);
+
+    console.log(`  📋 送信可能ボタン: ${memberInfo.length}個`);
+
+    // 1つずつクリックして送信
+    for (let i = 0; i < memberInfo.length && sentCount < maxSends; i++) {
+      const info = memberInfo[i];
+
+      if (info.skipReason) {
+        console.log(`  ⏭️ スキップ: ${info.skipReason}`);
+        continue;
+      }
+
+      try {
+        // ボタンを再取得してクリック（ページ更新対応）
+        const clicked = await page.evaluate((index, minWeeksVal) => {
+          const buttons = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
+          const sendButtons = buttons.filter(b => {
+            const text = (b.textContent || b.value || '').trim();
+            return text.match(/キテネを送る|ミテネを送る|キテネ送信|ミテネ送信|送る/);
+          });
+
+          // スキップ対象を除外してindex番目のボタン
+          let clickIndex = 0;
+          for (const btn of sendButtons) {
+            const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div') || btn.parentElement;
+            const parentText = (parent?.textContent || '').trim();
+            const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
+
+            let shouldSkip = false;
+            if (sentMatch && minWeeksVal > 0) {
+              const now = new Date();
+              const year = now.getFullYear();
+              const month = parseInt(sentMatch[1]) - 1;
+              const day = parseInt(sentMatch[2]);
+              let sentDate = new Date(year, month, day);
+              if (sentDate > now) sentDate = new Date(year - 1, month, day);
+              const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
+              if (weeksDiff < minWeeksVal) shouldSkip = true;
+            }
+
+            if (shouldSkip) continue;
+
+            if (clickIndex === index) {
+              btn.click();
+              return true;
+            }
+            clickIndex++;
+          }
+          return false;
+        }, sentCount, minWeeks);
+
+        if (clicked) {
+          sentCount++;
+          console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
+          await this._wait(3000);
+
+          // 確認ダイアログが出る場合
+          const confirmClicked = await page.evaluate(() => {
+            const btns = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')];
+            const confirmBtn = btns.find(b => {
+              const text = (b.textContent || b.value || '').trim();
+              return text.match(/OK|はい|確定|送信|実行/);
+            });
+            if (confirmBtn) {
+              confirmBtn.click();
+              return true;
+            }
+            return false;
+          });
+
+          if (confirmClicked) {
+            console.log(`  🔘 確認ボタンクリック`);
+            await this._wait(2000);
+          }
+        }
+      } catch (e) {
+        console.log(`  ⚠️ 送信${sentCount + 1}件目でエラー: ${e.message}`);
+      }
+    }
+
+    await this._screenshot(page, 'mitene-after-send');
+    return { success: sentCount > 0, count: sentCount };
   }
 
   // メイン処理
-  async send(account) {
+  async send(account, settings = {}) {
+    const maxSends = settings.miteneMaxSends || 10;
+    const minWeeks = settings.miteneMinWeeks || 0;
+
     let page = null;
     try {
       const browser = await this._launchBrowser();
@@ -301,12 +281,24 @@ class MiteneSender {
         await dialog.accept();
       });
 
+      console.log(`\n👋 ミテネ送信開始: ${account.name}`);
+      console.log(`  設定: 最大${maxSends}件送信, ${minWeeks > 0 ? minWeeks + '週間以上経過した人のみ' : '制限なし'}`);
+
+      // ステップ1: ログイン
       const loggedIn = await this._login(page, account);
       if (!loggedIn) return { success: false, error: 'ログイン失敗' };
 
-      const result = await this._sendMitene(page, account);
+      // ステップ2: 「キテネできる会員を探す」をクリック
+      const found = await this._findMembers(page);
+      if (!found) return { success: false, error: '「キテネできる会員を探す」が見つかりません' };
+
+      // ステップ3: 会員に送信（最大10件）
+      const result = await this._sendToMembers(page, maxSends, minWeeks);
+
+      console.log(`  🏁 送信完了: ${result.count}件`);
       return result;
     } catch (e) {
+      console.error(`  ❌ ミテネ送信エラー: ${e.message}`);
       return { success: false, error: e.message };
     } finally {
       if (page) await page.close().catch(() => {});
