@@ -75,7 +75,8 @@ router.post('/accounts', (req, res) => {
     loginUrl: req.body.loginUrl || '',
     loginId: req.body.loginId || '',
     loginPassword: req.body.loginPassword || '',
-    diaryUrl: req.body.diaryUrl || ''
+    diaryUrl: req.body.diaryUrl || '',
+    miteneUrl: req.body.miteneUrl || ''
   };
   accounts.push(account);
   saveAccounts(accounts);
@@ -175,6 +176,35 @@ router.post('/post/all', async (req, res) => {
 router.post('/post/:accountId', async (req, res) => {
   const result = await scheduler.runSingle(req.params.accountId);
   res.json(result);
+});
+
+// === ミテネ ===
+
+// 全アカウントミテネ送信
+router.post('/mitene/all', async (req, res) => {
+  res.json({ message: 'ミテネ送信を開始しました' });
+  scheduler.runMiteneOnce().catch(e => console.error('ミテネエラー:', e));
+});
+
+// 単一アカウントミテネ送信
+router.post('/mitene/:accountId', async (req, res) => {
+  const result = await scheduler.runMiteneSingle(req.params.accountId);
+  res.json(result);
+});
+
+// ミテネスケジューラー
+router.post('/mitene/scheduler/start', (req, res) => {
+  scheduler.startMitene();
+  res.json({ success: true, status: scheduler.getMiteneStatus() });
+});
+
+router.post('/mitene/scheduler/stop', (req, res) => {
+  scheduler.stopMitene();
+  res.json({ success: true, status: scheduler.getMiteneStatus() });
+});
+
+router.get('/mitene/status', (req, res) => {
+  res.json(scheduler.getMiteneStatus());
 });
 
 // === スケジューラー ===

@@ -17,6 +17,7 @@
       <ul class="nav-menu">
         <li><a href="#" data-page="dashboard" class="active">ダッシュボード</a></li>
         <li><a href="#" data-page="accounts">アカウント管理</a></li>
+        <li><a href="#" data-page="mitene">ミテネ</a></li>
         <li><a href="#" data-page="posts">投稿履歴</a></li>
         <li><a href="#" data-page="settings">設定</a></li>
       </ul>
@@ -52,6 +53,10 @@
           <button class="btn btn-primary" onclick="App.postAll()">全アカウント投稿</button>
           <button class="btn btn-secondary" id="btn-scheduler" onclick="App.toggleScheduler()">スケジューラー開始</button>
           <span id="scheduler-status" class="status-badge">停止中</span>
+          <span style="margin-left: 8px;"></span>
+          <button class="btn btn-mitene" onclick="App.miteneAll()">ミテネ一括送信</button>
+          <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">ミテネスケジューラー開始</button>
+          <span id="mitene-scheduler-status" class="status-badge">停止中</span>
         </div>
 
         <div class="card">
@@ -127,6 +132,10 @@
                 <label>日記投稿URL</label>
                 <input type="text" id="acc-diaryUrl" placeholder="https://spgirl.cityheaven.net/J4KeitaiDiaryPost.php?gid=...">
               </div>
+              <div class="form-group">
+                <label>ミテネURL（空欄の場合は自動検出）</label>
+                <input type="text" id="acc-miteneUrl" placeholder="https://spgirl.cityheaven.net/J4Kitene.php?gid=...">
+              </div>
 
               <hr>
               <h4>投稿オプション</h4>
@@ -174,6 +183,27 @@
         </div>
       </div>
 
+      <!-- ミテネ -->
+      <div id="page-mitene" class="page">
+        <h2>ミテネ（旧キテネ）自動送信</h2>
+
+        <div class="action-bar">
+          <button class="btn btn-mitene" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
+          <button class="btn btn-secondary" id="btn-mitene-scheduler-page" onclick="App.toggleMiteneScheduler()">ミテネスケジューラー開始</button>
+          <span id="mitene-scheduler-status-page" class="status-badge">停止中</span>
+        </div>
+
+        <div class="card">
+          <h3>アカウント別 ミテネ送信</h3>
+          <div id="mitene-accounts-list">読み込み中...</div>
+        </div>
+
+        <div class="card">
+          <h3>ミテネ送信履歴</h3>
+          <div id="mitene-history">読み込み中...</div>
+        </div>
+      </div>
+
       <!-- 投稿履歴 -->
       <div id="page-posts" class="page">
         <h2>投稿履歴</h2>
@@ -216,6 +246,22 @@
                 <span>実際にシティヘブンに投稿する</span>
               </label>
               <small>OFFの場合、日記生成のみ行い投稿はスキップします（テストモード）</small>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>ミテネ設定</h3>
+            <div class="form-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="set-miteneEnabled">
+                <span>ミテネ自動送信を有効にする</span>
+              </label>
+              <small>ONにすると、スケジュールに従ってミテネを自動送信します</small>
+            </div>
+            <div class="form-group">
+              <label>ミテネ Cron式</label>
+              <input type="text" id="set-miteneSchedule" value="0 */2 8-23 * * *">
+              <small>デフォルト: 8時〜23時の間、2時間ごと</small>
             </div>
           </div>
 

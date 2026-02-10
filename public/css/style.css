@@ -505,3 +505,55 @@ hr {
   border-top: 1px solid var(--border);
   margin: 20px 0;
 }
+
+/* ミテネ */
+.btn-mitene {
+  background: linear-gradient(135deg, #ff6b9d, #c44dff);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-mitene:hover {
+  background: linear-gradient(135deg, #ff85b1, #d070ff);
+  transform: translateY(-1px);
+}
+
+.btn-sm.btn-mitene {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.mitene-accounts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mitene-account-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.mitene-account-name {
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.mitene-account-url {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

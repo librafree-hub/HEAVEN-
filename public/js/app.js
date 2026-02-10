@@ -20,6 +20,7 @@ const App = {
 
         if (page === 'dashboard') this.loadDashboard();
         if (page === 'accounts') this.loadAccounts();
+        if (page === 'mitene') this.loadMitene();
         if (page === 'posts') this.loadPosts();
         if (page === 'settings') this.loadSettings();
       });
@@ -55,6 +56,19 @@ const App = {
       btn.textContent = 'スケジューラー開始';
     }
 
+    // ミテネスケジューラー状態
+    if (stats.scheduler?.miteneRunning) {
+      const mBadge = document.getElementById('mitene-scheduler-status');
+      const mBtn = document.getElementById('btn-mitene-scheduler');
+      if (mBadge) { mBadge.textContent = '稼働中'; mBadge.className = 'status-badge running'; }
+      if (mBtn) mBtn.textContent = 'ミテネスケジューラー停止';
+    } else {
+      const mBadge = document.getElementById('mitene-scheduler-status');
+      const mBtn = document.getElementById('btn-mitene-scheduler');
+      if (mBadge) { mBadge.textContent = '停止中'; mBadge.className = 'status-badge'; }
+      if (mBtn) mBtn.textContent = 'ミテネスケジューラー開始';
+    }
+
     // 最近の投稿
     const posts = await this.api('/posts?limit=10');
     document.getElementById('recent-posts').innerHTML = this.renderPostsTable(posts);
@@ -84,6 +98,7 @@ const App = {
         </div>
         <div class="account-actions">
           <button class="btn btn-sm btn-primary" onclick="App.postSingle('${a.id}')">投稿</button>
+          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ</button>
           <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
           <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
@@ -117,6 +132,7 @@ const App = {
     document.getElementById('acc-loginPassword').value = '';
     document.getElementById('acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み（変更する場合のみ入力）' : 'パスワードを入力';
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
+    document.getElementById('acc-miteneUrl').value = a.miteneUrl || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
     document.getElementById('modal-account').style.display = 'flex';
@@ -136,6 +152,7 @@ const App = {
       loginId: document.getElementById('acc-loginId').value,
       loginPassword: document.getElementById('acc-loginPassword').value || '***',
       diaryUrl: document.getElementById('acc-diaryUrl').value,
+      miteneUrl: document.getElementById('acc-miteneUrl').value,
       postType: document.getElementById('acc-postType').value,
       visibility: document.getElementById('acc-visibility').value,
       active: true
@@ -207,6 +224,115 @@ const App = {
     this.loadAccounts();
   },
 
+  // === ミテネ ===
+  async loadMitene() {
+    // アカウント一覧
+    const accounts = await this.api('/accounts');
+    const el = document.getElementById('mitene-accounts-list');
+
+    if (accounts.length === 0) {
+      el.innerHTML = '<div class="loading">アカウントがありません</div>';
+    } else {
+      el.innerHTML = `<div class="mitene-accounts-grid">${accounts.map(a => `
+        <div class="mitene-account-row">
+          <span class="mitene-account-name">${this.esc(a.name)}</span>
+          <span class="mitene-account-url">${a.miteneUrl ? this.esc(a.miteneUrl).substring(0, 50) + '...' : '自動検出'}</span>
+          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    // ミテネ送信履歴
+    const posts = await this.api('/posts?limit=200');
+    const mitenePosts = posts.filter(p => p.postType === 'mitene');
+    const historyEl = document.getElementById('mitene-history');
+    if (mitenePosts.length === 0) {
+      historyEl.innerHTML = '<div class="loading">ミテネ送信履歴がありません</div>';
+    } else {
+      this.renderMiteneHistory(historyEl, mitenePosts);
+    }
+
+    // ミテネスケジューラー状態更新
+    this.updateMiteneSchedulerStatus();
+  },
+
+  renderMiteneHistory(el, posts) {
+    const statusLabel = { success: '成功', failed: '失敗' };
+    let html = `<table class="posts-table">
+      <thead><tr>
+        <th>日時</th><th>アカウント</th><th>結果</th><th>詳細</th>
+      </tr></thead><tbody>`;
+
+    for (const p of posts) {
+      const time = new Date(p.timestamp).toLocaleString('ja-JP');
+      html += `<tr>
+        <td>${time}</td>
+        <td>${this.esc(p.accountName || p.accountId)}</td>
+        <td class="status-${p.status}">${statusLabel[p.status] || p.status}</td>
+        <td>${this.esc(p.message || '-')}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  },
+
+  async miteneAll() {
+    if (!confirm('全アカウントでミテネを送信しますか？')) return;
+    await this.api('/mitene/all', 'POST');
+    alert('ミテネ送信を開始しました。コンソールで進捗を確認してください。');
+  },
+
+  async miteneSingle(accountId) {
+    if (!confirm('このアカウントでミテネを送信しますか？')) return;
+    const result = await this.api(`/mitene/${accountId}`, 'POST');
+    if (result.error) {
+      alert(`エラー: ${result.error}`);
+    } else if (result.success) {
+      alert(`ミテネ送信完了: ${result.count || 0}件`);
+    } else {
+      alert(`ミテネ送信失敗: ${result.error || '不明なエラー'}`);
+    }
+    if (document.getElementById('page-mitene').classList.contains('active')) {
+      this.loadMitene();
+    }
+  },
+
+  async toggleMiteneScheduler() {
+    const status = await this.api('/mitene/status');
+    if (status.running) {
+      await this.api('/mitene/scheduler/stop', 'POST');
+    } else {
+      await this.api('/mitene/scheduler/start', 'POST');
+    }
+    this.updateMiteneSchedulerStatus();
+    this.loadDashboard();
+  },
+
+  async updateMiteneSchedulerStatus() {
+    const status = await this.api('/mitene/status');
+    // ダッシュボード上のミテネステータス
+    const pairs = [
+      ['mitene-scheduler-status', 'btn-mitene-scheduler'],
+      ['mitene-scheduler-status-page', 'btn-mitene-scheduler-page']
+    ];
+    for (const [badgeId, btnId] of pairs) {
+      const badge = document.getElementById(badgeId);
+      const btn = document.getElementById(btnId);
+      if (badge && btn) {
+        if (status.running) {
+          badge.textContent = '稼働中';
+          badge.className = 'status-badge running';
+          btn.textContent = 'ミテネスケジューラー停止';
+        } else {
+          badge.textContent = '停止中';
+          badge.className = 'status-badge';
+          btn.textContent = 'ミテネスケジューラー開始';
+        }
+      }
+    }
+  },
+
   // === 投稿 ===
   async postAll() {
     if (!confirm('全アカウントの投稿を開始しますか？')) return;
@@ -249,7 +375,7 @@ const App = {
 
     const statusLabel = { success: '成功', failed: '失敗', test: 'テスト' };
 
-    const typeLabel = { diary: '写メ日記', freepost: 'フリーポスト' };
+    const typeLabel = { diary: '写メ日記', freepost: 'フリーポスト', mitene: 'ミテネ' };
     const visLabel = { public: '全公開', mygirl: 'マイガール' };
 
     let html = `<table class="posts-table">
@@ -286,6 +412,8 @@ const App = {
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
     document.getElementById('set-postType').value = settings.postType || 'diary';
     document.getElementById('set-visibility').value = settings.visibility || 'public';
+    document.getElementById('set-miteneEnabled').checked = settings.miteneEnabled || false;
+    document.getElementById('set-miteneSchedule').value = settings.miteneSchedule || '0 */2 8-23 * * *';
   },
 
   async saveSettings(e) {
@@ -296,7 +424,9 @@ const App = {
       schedule: document.getElementById('set-schedule').value,
       postingEnabled: document.getElementById('set-postingEnabled').checked,
       postType: document.getElementById('set-postType').value,
-      visibility: document.getElementById('set-visibility').value
+      visibility: document.getElementById('set-visibility').value,
+      miteneEnabled: document.getElementById('set-miteneEnabled').checked,
+      miteneSchedule: document.getElementById('set-miteneSchedule').value
     };
     await this.api('/settings', 'PUT', data);
     alert('設定を保存しました');

@@ -11,6 +11,7 @@
     "loginUrl": "",
     "loginId": "",
     "loginPassword": "",
-    "diaryUrl": ""
+    "diaryUrl": "",
+    "miteneUrl": ""
   }
 ]

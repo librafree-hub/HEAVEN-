@@ -5,12 +5,16 @@ const database = require('./database');
 const imageManager = require('./image-manager');
 const aiGenerator = require('./ai-generator');
 const poster = require('./cityhaven-poster');
+const miteneSender = require('./mitene-sender');
 
 class Scheduler {
   constructor() {
     this.jobs = [];
+    this.miteneJobs = [];
     this.running = false;
+    this.miteneRunning = false;
     this.status = { lastRun: null, nextRun: null, isRunning: false };
+    this.miteneStatus = { lastRun: null, isRunning: false, lastResult: null };
   }
 
   // アカウント設定を読み込む
@@ -168,6 +172,131 @@ class Scheduler {
     return this.postForAccount(account);
   }
 
+  // === ミテネ機能 ===
+
+  // 1アカウント分のミテネ送信
+  async sendMiteneForAccount(account) {
+    const timestamp = new Date().toLocaleTimeString('ja-JP');
+    console.log(`\n👋 [${timestamp}] ミテネ送信開始: ${account.name}`);
+
+    try {
+      const result = await miteneSender.send(account);
+
+      database.addPost({
+        accountId: account.id,
+        accountName: account.name,
+        title: 'ミテネ送信',
+        body: '',
+        charCount: 0,
+        image: '',
+        postType: 'mitene',
+        status: result.success ? 'success' : 'failed',
+        message: result.success ? `${result.count || 0}件送信` : result.error
+      });
+
+      if (result.success) {
+        console.log(`  ✅ ${account.name}: ミテネ送信成功`);
+      } else {
+        console.log(`  ❌ ${account.name}: ミテネ送信失敗 - ${result.error}`);
+      }
+
+      return result;
+    } catch (e) {
+      console.error(`  ❌ ${account.name}: ミテネエラー - ${e.message}`);
+      database.addPost({
+        accountId: account.id,
+        accountName: account.name,
+        title: 'ミテネ送信',
+        body: '',
+        charCount: 0,
+        image: '',
+        postType: 'mitene',
+        status: 'failed',
+        message: e.message
+      });
+      return { success: false, error: e.message };
+    }
+  }
+
+  // 全アカウントミテネ送信（1回実行）
+  async runMiteneOnce() {
+    if (this.miteneStatus.isRunning) {
+      return { error: '既にミテネ実行中です' };
+    }
+
+    this.miteneStatus.isRunning = true;
+    this.miteneStatus.lastRun = new Date().toISOString();
+    const accounts = this._loadAccounts();
+    const results = [];
+
+    console.log(`\n👋 ミテネ送信開始: ${accounts.length}アカウント`);
+
+    for (const account of accounts) {
+      if (!account.loginId || !account.loginPassword) {
+        console.log(`  ⏭️ ${account.name}: ログイン情報未設定`);
+        continue;
+      }
+
+      const result = await this.sendMiteneForAccount(account);
+      results.push({ account: account.name, ...result });
+
+      // アカウント間に間隔を空ける（1〜3分）
+      if (accounts.indexOf(account) < accounts.length - 1) {
+        const waitMin = 1 + Math.random() * 2;
+        console.log(`  ⏳ 次のアカウントまで${waitMin.toFixed(1)}分待機...`);
+        await new Promise(r => setTimeout(r, waitMin * 60 * 1000));
+      }
+    }
+
+    this.miteneStatus.isRunning = false;
+    this.miteneStatus.lastResult = results;
+    console.log(`\n✅ ミテネ送信完了`);
+    return { results };
+  }
+
+  // 単一アカウントミテネ送信
+  async runMiteneSingle(accountId) {
+    const accounts = this._loadAccounts();
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return { error: `アカウントが見つかりません: ${accountId}` };
+    return this.sendMiteneForAccount(account);
+  }
+
+  // ミテネスケジュール開始
+  startMitene() {
+    const settings = this._loadSettings();
+    const cronExpression = settings.miteneSchedule || '0 */2 8-23 * * *';
+
+    this.stopMitene();
+
+    const job = cron.schedule(cronExpression, async () => {
+      console.log(`\n👋 ミテネスケジュール実行: ${new Date().toLocaleString('ja-JP')}`);
+      await this.runMiteneOnce();
+    });
+
+    this.miteneJobs.push(job);
+    this.miteneRunning = true;
+    console.log(`📅 ミテネスケジューラー開始: ${cronExpression}`);
+  }
+
+  // ミテネスケジュール停止
+  stopMitene() {
+    for (const job of this.miteneJobs) {
+      job.stop();
+    }
+    this.miteneJobs = [];
+    this.miteneRunning = false;
+  }
+
+  getMiteneStatus() {
+    return {
+      running: this.miteneRunning,
+      ...this.miteneStatus
+    };
+  }
+
+  // === 日記スケジュール ===
+
   // スケジュール開始
   start() {
     const settings = this._loadSettings();
@@ -198,7 +327,9 @@ class Scheduler {
   getStatus() {
     return {
       running: this.running,
-      ...this.status
+      miteneRunning: this.miteneRunning,
+      ...this.status,
+      mitene: this.miteneStatus
     };
   }
 }
