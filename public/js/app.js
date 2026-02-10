@@ -101,6 +101,11 @@ const App = {
 
   async updateDiaryPanel() {
     const stats = await this.api('/stats');
+    // 今日の投稿からミテネを除外して写メ日記のみカウント
+    const todayAll = await this.api('/posts/today');
+    const diaryToday = todayAll.filter(p => p.postType !== 'mitene');
+    const diarySuccess = diaryToday.filter(p => p.status === 'success').length;
+    const diaryFailed = diaryToday.filter(p => p.status === 'failed').length;
 
     // ステータスパネル
     const icon = document.getElementById('diary-live-icon');
@@ -120,8 +125,8 @@ const App = {
     }
 
     if (lastRun) {
-      if (stats.lastPost) {
-        const d = new Date(stats.lastPost);
+      if (stats.lastPost && stats.lastPost.timestamp) {
+        const d = new Date(stats.lastPost.timestamp);
         lastRun.textContent = d.toLocaleString('ja-JP');
       } else {
         lastRun.textContent = 'まだ投稿していません';
@@ -129,11 +134,11 @@ const App = {
     }
 
     if (todayCount) {
-      todayCount.textContent = `${stats.todayPosts || 0} 件`;
+      todayCount.textContent = `${diaryToday.length} 件`;
     }
 
     if (todayResult) {
-      todayResult.textContent = `${stats.successToday || 0} / ${stats.failedToday || 0}`;
+      todayResult.textContent = `${diarySuccess} / ${diaryFailed}`;
     }
 
     // スケジューラーボタン更新
