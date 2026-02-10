@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HEAVEN - 自動日記投稿システム</title>
+  <title>HEAVEN</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -12,13 +12,14 @@
     <nav class="sidebar">
       <div class="sidebar-header">
         <h1>HEAVEN</h1>
-        <p>自動日記投稿</p>
+        <p>自動化システム</p>
       </div>
       <ul class="nav-menu">
-        <li><a href="#" data-page="dashboard" class="active">ダッシュボード</a></li>
-        <li><a href="#" data-page="accounts">アカウント管理</a></li>
+        <li class="nav-section">メイン</li>
+        <li><a href="#" data-page="diary" class="active">写メ日記</a></li>
         <li><a href="#" data-page="mitene">ミテネ</a></li>
-        <li><a href="#" data-page="posts">投稿履歴</a></li>
+        <li class="nav-section">管理</li>
+        <li><a href="#" data-page="accounts">アカウント管理</a></li>
         <li><a href="#" data-page="settings">設定</a></li>
       </ul>
     </nav>
@@ -26,46 +27,135 @@
     <!-- メインコンテンツ -->
     <main class="content">
 
-      <!-- ダッシュボード -->
-      <div id="page-dashboard" class="page active">
-        <h2>ダッシュボード</h2>
+      <!-- ===== 写メ日記ページ ===== -->
+      <div id="page-diary" class="page active">
+        <h2>写メ日記 自動投稿</h2>
 
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-number" id="stat-today">0</div>
-            <div class="stat-label">今日の投稿</div>
+        <!-- ステータスパネル -->
+        <div class="status-panel">
+          <div class="status-panel-item">
+            <div class="status-panel-icon" id="diary-live-icon">&#9679;</div>
+            <div>
+              <div class="status-panel-label">スケジューラー</div>
+              <div class="status-panel-value" id="diary-live-status">停止中</div>
+            </div>
           </div>
-          <div class="stat-card success">
-            <div class="stat-number" id="stat-success">0</div>
-            <div class="stat-label">成功</div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">最終投稿</div>
+              <div class="status-panel-value" id="diary-last-run">-</div>
+            </div>
           </div>
-          <div class="stat-card danger">
-            <div class="stat-number" id="stat-failed">0</div>
-            <div class="stat-label">失敗</div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">今日の投稿</div>
+              <div class="status-panel-value" id="diary-today-count">0 件</div>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-number" id="stat-total">0</div>
-            <div class="stat-label">総投稿数</div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">成功 / 失敗</div>
+              <div class="status-panel-value" id="diary-today-result">0 / 0</div>
+            </div>
           </div>
         </div>
 
+        <!-- 操作ボタン -->
         <div class="action-bar">
-          <button class="btn btn-primary" onclick="App.postAll()">全アカウント投稿</button>
-          <button class="btn btn-secondary" id="btn-scheduler" onclick="App.toggleScheduler()">スケジューラー開始</button>
-          <span id="scheduler-status" class="status-badge">停止中</span>
-          <span style="margin-left: 8px;"></span>
-          <button class="btn btn-mitene" onclick="App.miteneAll()">ミテネ一括送信</button>
-          <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">ミテネスケジューラー開始</button>
-          <span id="mitene-scheduler-status" class="status-badge">停止中</span>
+          <button class="btn btn-primary btn-lg" onclick="App.postAll()">全アカウント投稿</button>
+          <button class="btn btn-secondary" id="btn-diary-scheduler" onclick="App.toggleScheduler()">スケジューラー開始</button>
+          <span id="diary-scheduler-status" class="status-badge">停止中</span>
         </div>
 
+        <!-- アカウント別操作 -->
         <div class="card">
-          <h3>最近の投稿</h3>
-          <div id="recent-posts">読み込み中...</div>
+          <h3>アカウント別 投稿</h3>
+          <div id="diary-accounts-list">読み込み中...</div>
+        </div>
+
+        <!-- 投稿履歴 -->
+        <div class="card">
+          <h3>投稿履歴</h3>
+          <div id="diary-history">読み込み中...</div>
         </div>
       </div>
 
-      <!-- アカウント管理 -->
+      <!-- ===== ミテネページ ===== -->
+      <div id="page-mitene" class="page">
+        <h2>ミテネ（旧キテネ）自動送信</h2>
+
+        <!-- ステータスパネル -->
+        <div class="status-panel">
+          <div class="status-panel-item">
+            <div class="status-panel-icon mitene-color" id="mitene-live-icon">&#9679;</div>
+            <div>
+              <div class="status-panel-label">スケジューラー</div>
+              <div class="status-panel-value" id="mitene-live-status">停止中</div>
+            </div>
+          </div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">最終実行</div>
+              <div class="status-panel-value" id="mitene-last-run">-</div>
+            </div>
+          </div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">今日のミテネ</div>
+              <div class="status-panel-value" id="mitene-today-count">0 回</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作ボタン -->
+        <div class="action-bar">
+          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
+          <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
+          <span id="mitene-scheduler-status" class="status-badge">停止中</span>
+        </div>
+
+        <!-- 使い方ガイド -->
+        <div class="card mitene-guide">
+          <h3>使い方</h3>
+          <div class="guide-steps">
+            <div class="guide-step">
+              <span class="guide-num">1</span>
+              <div>
+                <strong>アカウント設定</strong>
+                <p>「アカウント管理」でログイン情報を設定。ミテネURLは空欄でもOK（自動検出）</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">2</span>
+              <div>
+                <strong>手動テスト</strong>
+                <p>下のアカウント一覧から「ミテネ送信」をクリック。コンソールとスクショで確認</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">3</span>
+              <div>
+                <strong>自動化</strong>
+                <p>「スケジューラー開始」で定期実行。間隔は「設定」のCron式で変更可能</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- アカウント別操作 -->
+        <div class="card">
+          <h3>アカウント別 ミテネ送信</h3>
+          <div id="mitene-accounts-list">読み込み中...</div>
+        </div>
+
+        <!-- 送信履歴 -->
+        <div class="card">
+          <h3>ミテネ送信履歴</h3>
+          <div id="mitene-history">読み込み中...</div>
+        </div>
+      </div>
+
+      <!-- ===== アカウント管理ページ ===== -->
       <div id="page-accounts" class="page">
         <h2>アカウント管理</h2>
 
@@ -183,94 +273,20 @@
         </div>
       </div>
 
-      <!-- ミテネ -->
-      <div id="page-mitene" class="page">
-        <h2>ミテネ（旧キテネ）自動送信</h2>
-
-        <!-- ステータスパネル -->
-        <div class="mitene-status-panel">
-          <div class="mitene-status-item">
-            <div class="mitene-status-icon" id="mitene-live-icon">&#9679;</div>
-            <div>
-              <div class="mitene-status-label">スケジューラー</div>
-              <div class="mitene-status-value" id="mitene-live-status">停止中</div>
-            </div>
-          </div>
-          <div class="mitene-status-item">
-            <div>
-              <div class="mitene-status-label">最終実行</div>
-              <div class="mitene-status-value" id="mitene-last-run">-</div>
-            </div>
-          </div>
-          <div class="mitene-status-item">
-            <div>
-              <div class="mitene-status-label">今日のミテネ</div>
-              <div class="mitene-status-value" id="mitene-today-count">0 回</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 操作ボタン -->
-        <div class="action-bar" style="flex-wrap: wrap;">
-          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
-          <button class="btn btn-secondary" id="btn-mitene-scheduler-page" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
-          <span id="mitene-scheduler-status-page" class="status-badge">停止中</span>
-        </div>
-
-        <!-- 使い方ガイド -->
-        <div class="card mitene-guide">
-          <h3>使い方</h3>
-          <div class="guide-steps">
-            <div class="guide-step">
-              <span class="guide-num">1</span>
-              <div>
-                <strong>アカウント設定</strong>
-                <p>「アカウント管理」でログイン情報を設定。ミテネURLは空欄でもOK（自動検出）</p>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-num">2</span>
-              <div>
-                <strong>手動テスト</strong>
-                <p>下のアカウント一覧から「ミテネ送信」をクリック。コンソールとスクショでページ構造を確認</p>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-num">3</span>
-              <div>
-                <strong>自動化</strong>
-                <p>「スケジューラー開始」で定期実行。間隔は「設定」のCron式で変更可能</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- アカウント別操作 -->
-        <div class="card">
-          <h3>アカウント別 ミテネ送信</h3>
-          <div id="mitene-accounts-list">読み込み中...</div>
-        </div>
-
-        <!-- 送信履歴 -->
-        <div class="card">
-          <h3>ミテネ送信履歴</h3>
-          <div id="mitene-history">読み込み中...</div>
-        </div>
-      </div>
-
-      <!-- 投稿履歴 -->
-      <div id="page-posts" class="page">
-        <h2>投稿履歴</h2>
-        <div id="posts-list">読み込み中...</div>
-      </div>
-
-      <!-- 設定 -->
+      <!-- ===== 設定ページ ===== -->
       <div id="page-settings" class="page">
         <h2>設定</h2>
 
         <form id="form-settings" onsubmit="App.saveSettings(event)">
           <div class="card">
-            <h3>日記生成</h3>
+            <h3>写メ日記 設定</h3>
+            <div class="form-group">
+              <label class="toggle-label">
+                <input type="checkbox" id="set-postingEnabled">
+                <span>実際にシティヘブンに投稿する</span>
+              </label>
+              <small>OFFの場合、日記生成のみ行い投稿はスキップします（テストモード）</small>
+            </div>
             <div class="form-grid">
               <div class="form-group">
                 <label>最小文字数</label>
@@ -281,30 +297,33 @@
                 <input type="number" id="set-maxChars" value="1000">
               </div>
             </div>
-          </div>
-
-          <div class="card">
-            <h3>スケジュール</h3>
             <div class="form-group">
-              <label>Cron式</label>
+              <label>スケジュール Cron式</label>
               <input type="text" id="set-schedule" value="0 */3 8-23 * * *">
               <small>デフォルト: 8時〜23時の間、3時間ごと</small>
             </div>
-          </div>
-
-          <div class="card">
-            <h3>投稿制御</h3>
-            <div class="form-group">
-              <label class="toggle-label">
-                <input type="checkbox" id="set-postingEnabled">
-                <span>実際にシティヘブンに投稿する</span>
-              </label>
-              <small>OFFの場合、日記生成のみ行い投稿はスキップします（テストモード）</small>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>デフォルト投稿方法</label>
+                <select id="set-postType">
+                  <option value="diary">写メ日記</option>
+                  <option value="freepost">フリーポスト</option>
+                  <option value="random">ランダム</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>デフォルト公開範囲</label>
+                <select id="set-visibility">
+                  <option value="public">全公開</option>
+                  <option value="mygirl">マイガール限定</option>
+                  <option value="random">ランダム</option>
+                </select>
+              </div>
             </div>
           </div>
 
           <div class="card">
-            <h3>ミテネ設定</h3>
+            <h3>ミテネ 設定</h3>
             <div class="form-group">
               <label class="toggle-label">
                 <input type="checkbox" id="set-miteneEnabled">
@@ -313,32 +332,9 @@
               <small>ONにすると、スケジュールに従ってミテネを自動送信します</small>
             </div>
             <div class="form-group">
-              <label>ミテネ Cron式</label>
+              <label>ミテネスケジュール Cron式</label>
               <input type="text" id="set-miteneSchedule" value="0 */2 8-23 * * *">
               <small>デフォルト: 8時〜23時の間、2時間ごと</small>
-            </div>
-          </div>
-
-          <div class="card">
-            <h3>デフォルト投稿オプション</h3>
-            <small>アカウント個別に設定がない場合、この値が使われます</small>
-            <div class="form-grid" style="margin-top:12px;">
-              <div class="form-group">
-                <label>投稿方法</label>
-                <select id="set-postType">
-                  <option value="diary">写メ日記</option>
-                  <option value="freepost">フリーポスト</option>
-                  <option value="random">ランダム</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>公開範囲</label>
-                <select id="set-visibility">
-                  <option value="public">全公開</option>
-                  <option value="mygirl">マイガール限定</option>
-                  <option value="random">ランダム</option>
-                </select>
-              </div>
             </div>
           </div>
 

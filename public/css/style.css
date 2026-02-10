@@ -555,9 +555,6 @@ hr {
   color: var(--text-muted);
 }
 
-.mitene-account-info .text-danger {
-  color: var(--danger);
-}
 
 .mitene-account-status {
   font-size: 12px;
@@ -570,15 +567,25 @@ hr {
 .mitene-account-status.success { color: var(--success); }
 .mitene-account-status.failed { color: var(--danger); }
 
-/* ミテネ ステータスパネル */
-.mitene-status-panel {
+/* ナビセクション */
+.nav-section {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 16px 20px 4px;
+  list-style: none;
+}
+
+/* 共通ステータスパネル */
+.status-panel {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
 
-.mitene-status-item {
+.status-panel-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -588,17 +595,25 @@ hr {
   gap: 12px;
 }
 
-.mitene-status-icon {
+.status-panel-icon {
   font-size: 24px;
   color: var(--text-muted);
   line-height: 1;
 }
 
-.mitene-status-icon.active {
+.status-panel-icon.active {
   color: var(--success);
 }
 
-.mitene-status-icon.pulse {
+.status-panel-icon.mitene-color {
+  color: var(--text-muted);
+}
+
+.status-panel-icon.mitene-color.active {
+  color: #c44dff;
+}
+
+.status-panel-icon.pulse {
   animation: pulse-glow 1.5s infinite;
 }
 
@@ -607,19 +622,22 @@ hr {
   50% { opacity: 0.3; }
 }
 
-.mitene-status-label {
+.status-panel-label {
   font-size: 11px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.mitene-status-value {
+.status-panel-value {
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
   margin-top: 2px;
 }
+
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
 
 /* ミテネ 使い方ガイド */
 .mitene-guide {
@@ -670,6 +688,6 @@ hr {
 }
 
 @media (max-width: 768px) {
-  .mitene-status-panel { grid-template-columns: 1fr; }
+  .status-panel { grid-template-columns: 1fr; }
   .action-bar { flex-direction: column; align-items: stretch; }
 }
