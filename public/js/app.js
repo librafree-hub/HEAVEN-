@@ -98,7 +98,7 @@ const App = {
         </div>
         <div class="account-actions">
           <button class="btn btn-sm btn-primary" onclick="App.postSingle('${a.id}')">投稿</button>
-          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ</button>
+          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
           <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
           <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
@@ -225,22 +225,31 @@ const App = {
   },
 
   // === ミテネ ===
+  miteneRefreshTimer: null,
+
   async loadMitene() {
     // アカウント一覧
     const accounts = await this.api('/accounts');
     const el = document.getElementById('mitene-accounts-list');
 
     if (accounts.length === 0) {
-      el.innerHTML = '<div class="loading">アカウントがありません</div>';
+      el.innerHTML = '<div class="loading">アカウントがありません。「アカウント管理」から追加してください。</div>';
     } else {
       el.innerHTML = `<div class="mitene-accounts-grid">${accounts.map(a => `
         <div class="mitene-account-row">
           <span class="mitene-account-name">${this.esc(a.name)}</span>
-          <span class="mitene-account-url">${a.miteneUrl ? this.esc(a.miteneUrl).substring(0, 50) + '...' : '自動検出'}</span>
-          <button class="btn btn-sm btn-mitene" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
+          <span class="mitene-account-info">
+            ${a.loginId ? 'ID設定済' : '<span class="text-danger">ID未設定</span>'}
+            ${a.miteneUrl ? ' / URL設定済' : ' / URL自動検出'}
+          </span>
+          <span class="mitene-account-status" id="mitene-acc-status-${a.id}"></span>
+          <button class="btn btn-sm btn-mitene" id="mitene-btn-${a.id}" onclick="App.miteneSingle('${a.id}')">ミテネ送信</button>
         </div>
       `).join('')}</div>`;
     }
+
+    // ステータスパネル更新
+    await this.updateMitenePanel();
 
     // ミテネ送信履歴
     const posts = await this.api('/posts?limit=200');
@@ -252,8 +261,87 @@ const App = {
       this.renderMiteneHistory(historyEl, mitenePosts);
     }
 
-    // ミテネスケジューラー状態更新
-    this.updateMiteneSchedulerStatus();
+    // 5秒ごとに自動更新
+    this.startMiteneRefresh();
+  },
+
+  startMiteneRefresh() {
+    this.stopMiteneRefresh();
+    this.miteneRefreshTimer = setInterval(async () => {
+      if (!document.getElementById('page-mitene').classList.contains('active')) {
+        this.stopMiteneRefresh();
+        return;
+      }
+      await this.updateMitenePanel();
+    }, 5000);
+  },
+
+  stopMiteneRefresh() {
+    if (this.miteneRefreshTimer) {
+      clearInterval(this.miteneRefreshTimer);
+      this.miteneRefreshTimer = null;
+    }
+  },
+
+  async updateMitenePanel() {
+    const status = await this.api('/mitene/status');
+    const posts = await this.api('/posts/today');
+    const miteneToday = posts.filter(p => p.postType === 'mitene');
+    const successToday = miteneToday.filter(p => p.status === 'success').length;
+    const failedToday = miteneToday.filter(p => p.status === 'failed').length;
+
+    // ステータスパネル
+    const icon = document.getElementById('mitene-live-icon');
+    const liveStatus = document.getElementById('mitene-live-status');
+    const lastRun = document.getElementById('mitene-last-run');
+    const todayCount = document.getElementById('mitene-today-count');
+
+    if (icon && liveStatus) {
+      if (status.isRunning) {
+        icon.className = 'mitene-status-icon active pulse';
+        liveStatus.textContent = '送信中...';
+      } else if (status.running) {
+        icon.className = 'mitene-status-icon active';
+        liveStatus.textContent = '自動実行中';
+      } else {
+        icon.className = 'mitene-status-icon';
+        liveStatus.textContent = '停止中';
+      }
+    }
+
+    if (lastRun) {
+      if (status.lastRun) {
+        const d = new Date(status.lastRun);
+        lastRun.textContent = d.toLocaleString('ja-JP');
+      } else {
+        lastRun.textContent = 'まだ実行していません';
+      }
+    }
+
+    if (todayCount) {
+      todayCount.textContent = `${successToday} 回成功 / ${failedToday} 回失敗`;
+    }
+
+    // スケジューラーボタン更新
+    const pairs = [
+      ['mitene-scheduler-status', 'btn-mitene-scheduler'],
+      ['mitene-scheduler-status-page', 'btn-mitene-scheduler-page']
+    ];
+    for (const [badgeId, btnId] of pairs) {
+      const badge = document.getElementById(badgeId);
+      const btn = document.getElementById(btnId);
+      if (badge && btn) {
+        if (status.running) {
+          badge.textContent = '稼働中';
+          badge.className = 'status-badge running';
+          btn.textContent = 'スケジューラー停止';
+        } else {
+          badge.textContent = '停止中';
+          badge.className = 'status-badge';
+          btn.textContent = 'スケジューラー開始';
+        }
+      }
+    }
   },
 
   renderMiteneHistory(el, posts) {
@@ -280,21 +368,43 @@ const App = {
   async miteneAll() {
     if (!confirm('全アカウントでミテネを送信しますか？')) return;
     await this.api('/mitene/all', 'POST');
-    alert('ミテネ送信を開始しました。コンソールで進捗を確認してください。');
+    // 送信開始後すぐにパネルを更新
+    setTimeout(() => this.updateMitenePanel(), 1000);
   },
 
   async miteneSingle(accountId) {
     if (!confirm('このアカウントでミテネを送信しますか？')) return;
-    const result = await this.api(`/mitene/${accountId}`, 'POST');
+
+    // ボタンを送信中に変更
+    const btn = document.getElementById(`mitene-btn-${accountId}`);
+    const statusEl = document.getElementById(`mitene-acc-status-${accountId}`);
+    if (btn) { btn.disabled = true; btn.textContent = '送信中...'; }
+    if (statusEl) { statusEl.textContent = '処理中...'; statusEl.className = 'mitene-account-status sending'; }
+
+    const result = await this.api(`/mitene/send/${accountId}`, 'POST');
+
+    if (btn) { btn.disabled = false; btn.textContent = 'ミテネ送信'; }
+
     if (result.error) {
+      if (statusEl) { statusEl.textContent = '失敗'; statusEl.className = 'mitene-account-status failed'; }
       alert(`エラー: ${result.error}`);
     } else if (result.success) {
-      alert(`ミテネ送信完了: ${result.count || 0}件`);
+      if (statusEl) { statusEl.textContent = '成功!'; statusEl.className = 'mitene-account-status success'; }
+      alert(`ミテネ送信完了`);
     } else {
+      if (statusEl) { statusEl.textContent = '失敗'; statusEl.className = 'mitene-account-status failed'; }
       alert(`ミテネ送信失敗: ${result.error || '不明なエラー'}`);
     }
+
+    // 履歴を更新
     if (document.getElementById('page-mitene').classList.contains('active')) {
-      this.loadMitene();
+      const posts = await this.api('/posts?limit=200');
+      const mitenePosts = posts.filter(p => p.postType === 'mitene');
+      const historyEl = document.getElementById('mitene-history');
+      if (mitenePosts.length > 0) {
+        this.renderMiteneHistory(historyEl, mitenePosts);
+      }
+      await this.updateMitenePanel();
     }
   },
 
@@ -305,32 +415,8 @@ const App = {
     } else {
       await this.api('/mitene/scheduler/start', 'POST');
     }
-    this.updateMiteneSchedulerStatus();
+    await this.updateMitenePanel();
     this.loadDashboard();
-  },
-
-  async updateMiteneSchedulerStatus() {
-    const status = await this.api('/mitene/status');
-    // ダッシュボード上のミテネステータス
-    const pairs = [
-      ['mitene-scheduler-status', 'btn-mitene-scheduler'],
-      ['mitene-scheduler-status-page', 'btn-mitene-scheduler-page']
-    ];
-    for (const [badgeId, btnId] of pairs) {
-      const badge = document.getElementById(badgeId);
-      const btn = document.getElementById(btnId);
-      if (badge && btn) {
-        if (status.running) {
-          badge.textContent = '稼働中';
-          badge.className = 'status-badge running';
-          btn.textContent = 'ミテネスケジューラー停止';
-        } else {
-          badge.textContent = '停止中';
-          badge.className = 'status-badge';
-          btn.textContent = 'ミテネスケジューラー開始';
-        }
-      }
-    }
   },
 
   // === 投稿 ===

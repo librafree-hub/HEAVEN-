@@ -187,17 +187,71 @@
       <div id="page-mitene" class="page">
         <h2>ミテネ（旧キテネ）自動送信</h2>
 
-        <div class="action-bar">
-          <button class="btn btn-mitene" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
-          <button class="btn btn-secondary" id="btn-mitene-scheduler-page" onclick="App.toggleMiteneScheduler()">ミテネスケジューラー開始</button>
+        <!-- ステータスパネル -->
+        <div class="mitene-status-panel">
+          <div class="mitene-status-item">
+            <div class="mitene-status-icon" id="mitene-live-icon">&#9679;</div>
+            <div>
+              <div class="mitene-status-label">スケジューラー</div>
+              <div class="mitene-status-value" id="mitene-live-status">停止中</div>
+            </div>
+          </div>
+          <div class="mitene-status-item">
+            <div>
+              <div class="mitene-status-label">最終実行</div>
+              <div class="mitene-status-value" id="mitene-last-run">-</div>
+            </div>
+          </div>
+          <div class="mitene-status-item">
+            <div>
+              <div class="mitene-status-label">今日のミテネ</div>
+              <div class="mitene-status-value" id="mitene-today-count">0 回</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作ボタン -->
+        <div class="action-bar" style="flex-wrap: wrap;">
+          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">全アカウント ミテネ送信</button>
+          <button class="btn btn-secondary" id="btn-mitene-scheduler-page" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
           <span id="mitene-scheduler-status-page" class="status-badge">停止中</span>
         </div>
 
+        <!-- 使い方ガイド -->
+        <div class="card mitene-guide">
+          <h3>使い方</h3>
+          <div class="guide-steps">
+            <div class="guide-step">
+              <span class="guide-num">1</span>
+              <div>
+                <strong>アカウント設定</strong>
+                <p>「アカウント管理」でログイン情報を設定。ミテネURLは空欄でもOK（自動検出）</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">2</span>
+              <div>
+                <strong>手動テスト</strong>
+                <p>下のアカウント一覧から「ミテネ送信」をクリック。コンソールとスクショでページ構造を確認</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">3</span>
+              <div>
+                <strong>自動化</strong>
+                <p>「スケジューラー開始」で定期実行。間隔は「設定」のCron式で変更可能</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- アカウント別操作 -->
         <div class="card">
           <h3>アカウント別 ミテネ送信</h3>
           <div id="mitene-accounts-list">読み込み中...</div>
         </div>
 
+        <!-- 送信履歴 -->
         <div class="card">
           <h3>ミテネ送信履歴</h3>
           <div id="mitene-history">読み込み中...</div>

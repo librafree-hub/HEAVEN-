@@ -549,11 +549,127 @@ hr {
   min-width: 80px;
 }
 
-.mitene-account-url {
+.mitene-account-info {
   flex: 1;
   font-size: 12px;
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.mitene-account-info .text-danger {
+  color: var(--danger);
+}
+
+.mitene-account-status {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 60px;
+  text-align: center;
+}
+
+.mitene-account-status.sending { color: var(--warning); }
+.mitene-account-status.success { color: var(--success); }
+.mitene-account-status.failed { color: var(--danger); }
+
+/* ミテネ ステータスパネル */
+.mitene-status-panel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.mitene-status-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mitene-status-icon {
+  font-size: 24px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.mitene-status-icon.active {
+  color: var(--success);
+}
+
+.mitene-status-icon.pulse {
+  animation: pulse-glow 1.5s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.mitene-status-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mitene-status-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+/* ミテネ 使い方ガイド */
+.mitene-guide {
+  border-color: rgba(196, 77, 255, 0.25);
+}
+
+.guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.guide-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.guide-num {
+  background: linear-gradient(135deg, #ff6b9d, #c44dff);
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.guide-step strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.guide-step p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.btn-lg {
+  padding: 12px 28px;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .mitene-status-panel { grid-template-columns: 1fr; }
+  .action-bar { flex-direction: column; align-items: stretch; }
 }

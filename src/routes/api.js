@@ -180,19 +180,18 @@ router.post('/post/:accountId', async (req, res) => {
 
 // === ミテネ ===
 
+// ミテネステータス
+router.get('/mitene/status', (req, res) => {
+  res.json(scheduler.getMiteneStatus());
+});
+
 // 全アカウントミテネ送信
 router.post('/mitene/all', async (req, res) => {
   res.json({ message: 'ミテネ送信を開始しました' });
   scheduler.runMiteneOnce().catch(e => console.error('ミテネエラー:', e));
 });
 
-// 単一アカウントミテネ送信
-router.post('/mitene/:accountId', async (req, res) => {
-  const result = await scheduler.runMiteneSingle(req.params.accountId);
-  res.json(result);
-});
-
-// ミテネスケジューラー
+// ミテネスケジューラー（:accountIdより先に定義）
 router.post('/mitene/scheduler/start', (req, res) => {
   scheduler.startMitene();
   res.json({ success: true, status: scheduler.getMiteneStatus() });
@@ -203,8 +202,10 @@ router.post('/mitene/scheduler/stop', (req, res) => {
   res.json({ success: true, status: scheduler.getMiteneStatus() });
 });
 
-router.get('/mitene/status', (req, res) => {
-  res.json(scheduler.getMiteneStatus());
+// 単一アカウントミテネ送信（パラメータルートは最後）
+router.post('/mitene/send/:accountId', async (req, res) => {
+  const result = await scheduler.runMiteneSingle(req.params.accountId);
+  res.json(result);
 });
 
 // === スケジューラー ===
