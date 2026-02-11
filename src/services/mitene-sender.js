@@ -143,13 +143,39 @@ class MiteneSender {
     return remaining;
   }
 
-  // ステップ3: registComeon(uid) を直接呼び出してキテネを送る
+  // ステップ3: ランダムにタブを選んでからregistComeon(uid)で送る
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
     // 会員リストのURLを保存（送信後に戻るため）
     const memberListUrl = page.url();
     console.log(`  📍 会員リストURL: ${memberListUrl}`);
+
+    // ランダムにタブを選んでクリック（みたよ / マイガール / マッチ率）
+    const tabName = await page.evaluate(() => {
+      const tabs = [...document.querySelectorAll('a, button, li, div')];
+      const targetTabs = ['みたよ', 'マイガール', 'マッチ率'];
+      const found = [];
+      for (const tab of tabs) {
+        const text = (tab.textContent || '').trim();
+        if (targetTabs.includes(text) && (tab.tagName === 'A' || tab.tagName === 'BUTTON' || tab.tagName === 'LI')) {
+          found.push({ el: tab, text });
+        }
+      }
+      if (found.length > 0) {
+        const pick = found[Math.floor(Math.random() * found.length)];
+        pick.el.click();
+        return pick.text;
+      }
+      return null;
+    });
+
+    if (tabName) {
+      console.log(`  🎲 タブ「${tabName}」をランダム選択してクリック`);
+      await this._wait(3000);
+    } else {
+      console.log(`  ⚠️ タブが見つからず。現在のページのまま続行。`);
+    }
 
     // 残り回数を確認
     const countInfo = await this._getRemainingCount(page);
