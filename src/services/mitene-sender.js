@@ -143,35 +143,13 @@ class MiteneSender {
     return remaining;
   }
 
-  // ステップ3: 「キテネを送る」「ミテネを送る」を1つずつ押す
+  // ステップ3: registComeon(uid) を直接呼び出してキテネを送る
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
     // 会員リストのURLを保存（送信後に戻るため）
     const memberListUrl = page.url();
     console.log(`  📍 会員リストURL: ${memberListUrl}`);
-
-    // まずページ上のボタン構造をデバッグ出力
-    const debugInfo = await page.evaluate(() => {
-      const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-      const matched = allElements.filter(el => {
-        const text = (el.textContent || el.value || '').trim();
-        return text.match(/キテネ|ミテネ|送る/);
-      });
-      return matched.map(el => ({
-        tag: el.tagName,
-        text: (el.textContent || el.value || '').trim().substring(0, 50),
-        href: el.href || null,
-        onclick: el.getAttribute('onclick') || null,
-        className: el.className || null,
-        html: el.outerHTML.substring(0, 300)
-      }));
-    });
-    console.log(`  🔍 ボタン構造デバッグ (${debugInfo.length}個):`);
-    for (const d of debugInfo) {
-      console.log(`    [${d.tag}] text="${d.text}" href="${d.href}" onclick="${d.onclick}" class="${d.className}"`);
-      console.log(`    HTML: ${d.html}`);
-    }
 
     // 残り回数を確認
     const countInfo = await this._getRemainingCount(page);
@@ -187,81 +165,50 @@ class MiteneSender {
       }
     }
 
+    // registComeon(uid) のuidを全部取得
+    const uids = await page.evaluate(() => {
+      const buttons = document.querySelectorAll('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper');
+      const ids = [];
+      for (const btn of buttons) {
+        const onclick = btn.getAttribute('onclick') || '';
+        const match = onclick.match(/registComeon\((\d+)\)/);
+        if (match) ids.push(match[1]);
+      }
+      // クラス名で見つからない場合、onclick属性で探す
+      if (ids.length === 0) {
+        const allLinks = document.querySelectorAll('a[onclick*="registComeon"]');
+        for (const link of allLinks) {
+          const onclick = link.getAttribute('onclick') || '';
+          const match = onclick.match(/registComeon\((\d+)\)/);
+          if (match) ids.push(match[1]);
+        }
+      }
+      return ids;
+    });
+
+    console.log(`  📋 送信対象: ${uids.length}人 (uid: ${uids.join(', ')})`);
+
+    if (uids.length === 0) {
+      console.log(`  ⚠️ 送信対象が見つかりません。`);
+      return { success: false, count: 0, error: '送信対象が見つかりません' };
+    }
+
     let sentCount = 0;
 
-    for (let attempt = 0; attempt < maxSends; attempt++) {
+    for (let i = 0; i < uids.length && sentCount < maxSends; i++) {
+      const uid = uids[i];
       try {
-        // ボタンのhrefを取得（<a>の場合、hrefを直接使ってページ遷移を防ぐ）
-        const btnData = await page.evaluate((minWeeksVal) => {
-          const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-          const sendButtons = allElements.filter(el => {
-            const text = (el.textContent || el.value || '').trim();
-            return text.match(/キテネを送る|ミテネを送る/);
-          });
+        console.log(`  🖱️ registComeon(${uid}) 呼び出し中... (${sentCount + 1}/${maxSends})`);
 
-          if (sendButtons.length === 0) return null;
-
-          for (const btn of sendButtons) {
-            const parent = btn.closest('tr') || btn.closest('li') || btn.closest('div.member') || btn.closest('div') || btn.parentElement;
-            const parentText = (parent?.textContent || '').trim();
-            const sentMatch = parentText.match(/(\d{1,2})月(\d{1,2})日.*送付済/);
-            let shouldSkip = false;
-
-            if (sentMatch && minWeeksVal > 0) {
-              const now = new Date();
-              const year = now.getFullYear();
-              const month = parseInt(sentMatch[1]) - 1;
-              const day = parseInt(sentMatch[2]);
-              let sentDate = new Date(year, month, day);
-              if (sentDate > now) sentDate = new Date(year - 1, month, day);
-              const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-              if (weeksDiff < minWeeksVal) shouldSkip = true;
-            }
-
-            if (!shouldSkip) {
-              // hrefを奪い取ってページ遷移を防止
-              const href = btn.href || null;
-              const onclick = btn.getAttribute('onclick') || null;
-              if (btn.tagName === 'A') {
-                btn.removeAttribute('href');
-              }
-              return {
-                href,
-                onclick,
-                tag: btn.tagName,
-                text: (btn.textContent || '').trim().substring(0, 30),
-                total: sendButtons.length
-              };
-            }
-          }
-          return { allSkipped: true };
-        }, minWeeks);
-
-        if (!btnData) {
-          console.log(`  📋 送信ボタンなし。完了。`);
-          break;
-        }
-        if (btnData.allSkipped) {
-          console.log(`  ⏭️ 全てスキップ対象。`);
-          break;
-        }
-
-        console.log(`  🖱️ 「${btnData.text}」(${btnData.tag}) href=${btnData.href} onclick=${btnData.onclick}`);
-
-        // hrefを除去したボタンをクリック → onclickのみ発火（confirm + 送信処理）
-        await page.evaluate(() => {
-          const allElements = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')];
-          const btn = allElements.find(el => {
-            const text = (el.textContent || el.value || '').trim();
-            return text.match(/キテネを送る|ミテネを送る/) && !el.href;
-          });
-          if (btn) btn.click();
-        });
+        // registComeon(uid) を直接呼び出す → confirm("キテネしますか？") が出る → 自動承認
+        await page.evaluate((id) => {
+          registComeon(parseInt(id));
+        }, uid);
 
         // confirm ダイアログは page.on('dialog') で自動承認
         await this._wait(3000);
 
-        // ナビゲーションが発生した場合（客ページに飛んだ場合）→ 会員リストに戻る
+        // ページ遷移が発生した場合、会員リストに戻る
         const currentUrl = page.url();
         if (currentUrl !== memberListUrl) {
           console.log(`  📍 遷移検知: ${currentUrl}`);
@@ -282,11 +229,9 @@ class MiteneSender {
             break;
           }
         }
-
-        await this._screenshot(page, `mitene-sent-${sentCount}`);
       } catch (e) {
-        console.log(`  ⚠️ 送信${sentCount + 1}件目エラー: ${e.message}`);
-        await this._screenshot(page, 'mitene-send-error');
+        console.log(`  ⚠️ uid=${uid} 送信エラー: ${e.message}`);
+        // エラー時も会員リストに戻って続行
         try {
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
