@@ -147,35 +147,31 @@ class MiteneSender {
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
+    // URLからgidを取得
+    const currentUrl = page.url();
+    const gidMatch = currentUrl.match(/gid=(\d+)/);
+    const gid = gidMatch ? gidMatch[1] : null;
+    console.log(`  📍 現在のURL: ${currentUrl} (gid=${gid})`);
+
+    // ランダムにタブを選んでURL直接遷移（みたよ / マイガール / マッチ率）
+    const tabOptions = [
+      { name: 'みたよ', path: 'J10ComeonVisitorList.php' },
+      { name: 'マイガール', path: 'J10ComeonMyGirlList.php' },
+      { name: 'マッチ率', path: 'J10ComeonAiMatchingList.php' }
+    ];
+    const pick = tabOptions[Math.floor(Math.random() * tabOptions.length)];
+
+    if (gid) {
+      const tabUrl = `https://spgirl.cityheaven.net/${pick.path}?gid=${gid}`;
+      console.log(`  🎲 タブ「${pick.name}」をランダム選択 → ${tabUrl}`);
+      await page.goto(tabUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      await this._wait(2000);
+    } else {
+      console.log(`  ⚠️ gid取得できず。現在のページのまま続行。`);
+    }
+
     // 会員リストのURLを保存（送信後に戻るため）
     const memberListUrl = page.url();
-    console.log(`  📍 会員リストURL: ${memberListUrl}`);
-
-    // ランダムにタブを選んでクリック（みたよ / マイガール / マッチ率）
-    const tabName = await page.evaluate(() => {
-      const tabs = [...document.querySelectorAll('a, button, li, div')];
-      const targetTabs = ['みたよ', 'マイガール', 'マッチ率'];
-      const found = [];
-      for (const tab of tabs) {
-        const text = (tab.textContent || '').trim();
-        if (targetTabs.includes(text) && (tab.tagName === 'A' || tab.tagName === 'BUTTON' || tab.tagName === 'LI')) {
-          found.push({ el: tab, text });
-        }
-      }
-      if (found.length > 0) {
-        const pick = found[Math.floor(Math.random() * found.length)];
-        pick.el.click();
-        return pick.text;
-      }
-      return null;
-    });
-
-    if (tabName) {
-      console.log(`  🎲 タブ「${tabName}」をランダム選択してクリック`);
-      await this._wait(3000);
-    } else {
-      console.log(`  ⚠️ タブが見つからず。現在のページのまま続行。`);
-    }
 
     // 残り回数を確認
     const countInfo = await this._getRemainingCount(page);
