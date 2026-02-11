@@ -164,8 +164,28 @@ class MiteneSender {
     if (gid) {
       const tabUrl = `https://spgirl.cityheaven.net/${pick.path}?gid=${gid}`;
       console.log(`  🎲 タブ「${pick.name}」をランダム選択 → ${tabUrl}`);
-      await page.goto(tabUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-      await this._wait(2000);
+      try {
+        await page.goto(tabUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      } catch (navErr) {
+        // networkidle2タイムアウトでもページは読み込まれている場合がある
+        console.log(`  ⚠️ ページ読み込みタイムアウト、続行を試みます...`);
+        await this._wait(3000);
+      }
+      // ページ完全読み込みを待つ（マッチ率/マイガールはロードが遅い）
+      await this._wait(4000);
+      // キテネボタンが表示されるまで最大15秒待機
+      try {
+        await page.waitForSelector('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]', { timeout: 15000 });
+        console.log(`  ✅ ボタン検出OK`);
+      } catch (e) {
+        console.log(`  ⚠️ ボタン検出タイムアウト。ページリロードして再試行...`);
+        try {
+          await page.reload({ waitUntil: 'networkidle2', timeout: 60000 });
+        } catch (reloadErr) {
+          console.log(`  ⚠️ リロードタイムアウト、続行を試みます...`);
+        }
+        await this._wait(5000);
+      }
     } else {
       console.log(`  ⚠️ gid取得できず。現在のページのまま続行。`);
     }
@@ -173,8 +193,14 @@ class MiteneSender {
     // 会員リストのURLを保存（送信後に戻るため）
     const memberListUrl = page.url();
 
-    // 残り回数を確認
-    const countInfo = await this._getRemainingCount(page);
+    // 残り回数を確認（ページが完全に読み込まれるのを待つ）
+    let countInfo = null;
+    for (let retry = 0; retry < 3; retry++) {
+      countInfo = await this._getRemainingCount(page);
+      if (countInfo) break;
+      console.log(`  ⏳ 残り回数読み取り待機中... (${retry + 1}/3)`);
+      await this._wait(3000);
+    }
     if (countInfo) {
       console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total}`);
       if (countInfo.remaining === 0) {
@@ -332,8 +358,19 @@ class MiteneSender {
         page.on('dialog', dialogTracker);
 
         // Puppeteerのネイティブクリック（実際のマウスイベント）
-        await clickedButton.click();
-        await this._wait(4000);
+        try {
+          await clickedButton.click();
+        } catch (clickErr) {
+          console.log(`  ⚠️ クリック失敗（要素が消えた？）: ${clickErr.message}`);
+          page.off('dialog', dialogTracker);
+          // ページをリロードして再試行
+          try {
+            await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+          } catch (e2) { /* タイムアウトでも続行 */ }
+          await this._wait(3000);
+          continue;
+        }
+        await this._wait(5000);
 
         page.off('dialog', dialogTracker);
 
@@ -341,8 +378,10 @@ class MiteneSender {
         if (lastDialogMessage.includes('エラー')) {
           errorCount++;
           console.log(`  ❌ 送信失敗: ${lastDialogMessage}`);
-          await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-          await this._wait(2000);
+          try {
+            await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+          } catch (e2) { /* タイムアウトでも続行 */ }
+          await this._wait(3000);
           continue;
         }
 
@@ -351,8 +390,12 @@ class MiteneSender {
         if (afterUrl !== memberListUrl) {
           console.log(`  📍 遷移検知: ${afterUrl}`);
           console.log(`  🔙 会員リストに戻る...`);
-          await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-          await this._wait(2000);
+          try {
+            await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+          } catch (e2) {
+            console.log(`  ⚠️ 戻りタイムアウト、続行...`);
+          }
+          await this._wait(3000);
         }
 
         sentCount++;
@@ -371,11 +414,11 @@ class MiteneSender {
         console.log(`  ⚠️ 送信エラー: ${e.message}`);
         errorCount++;
         try {
-          await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-          await this._wait(2000);
+          await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+          await this._wait(3000);
         } catch (navErr) {
-          console.log(`  ❌ 復帰失敗: ${navErr.message}`);
-          break;
+          console.log(`  ⚠️ 復帰タイムアウト、続行を試みます...`);
+          await this._wait(3000);
         }
       }
     }
