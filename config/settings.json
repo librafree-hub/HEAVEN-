@@ -4,5 +4,5 @@
   "postingEnabled": false,
   "schedule": "0 */3 8-23 * * *",
   "miteneMaxSends": 10,
-  "miteneMinWeeks": 0
+  "miteneMinWeeks": 2
 }

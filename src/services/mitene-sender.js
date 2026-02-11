@@ -189,10 +189,11 @@ class MiteneSender {
 
     let sentCount = 0;
     let errorCount = 0;
+    let skipCount = 0;
     const triedUids = new Set();
 
     // 送信ループ: ページから毎回ボタンを探して1つクリック → 戻る → 繰り返し
-    for (let attempt = 0; attempt < maxSends + errorCount && sentCount < maxSends; attempt++) {
+    for (let attempt = 0; attempt < maxSends * 3 && sentCount < maxSends; attempt++) {
       try {
         // ページ上のキテネ送信ボタンを取得（Puppeteer ElementHandle）
         const buttons = await page.$$('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]');
@@ -202,21 +203,92 @@ class MiteneSender {
           break;
         }
 
-        // まだ試してないボタンを探す
+        // まだ試してないボタンを探す（送付済み日付もチェック）
         let clickedButton = null;
         let clickedUid = null;
+        let allChecked = true;
         for (const btn of buttons) {
-          const onclick = await page.evaluate(el => el.getAttribute('onclick') || '', btn);
-          const uidMatch = onclick.match(/registComeon\((\d+)\)/);
-          if (uidMatch && !triedUids.has(uidMatch[1])) {
-            clickedUid = uidMatch[1];
-            clickedButton = btn;
-            break;
+          const btnInfo = await page.evaluate((el, minWeeksVal) => {
+            const onclick = el.getAttribute('onclick') || '';
+            const uidMatch = onclick.match(/registComeon\((\d+)\)/);
+            if (!uidMatch) return { uid: null };
+
+            const uid = uidMatch[1];
+
+            // ボタンの周辺要素から「送信済」日付を探す
+            // 実際のフォーマット: 「2026/02/11 送信済」
+            let parentEl = el.parentElement;
+            for (let i = 0; i < 8 && parentEl; i++) {
+              const text = parentEl.textContent || '';
+              // 「2026/02/11 送信済」「2026/2/11 送信済」パターン
+              const match = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s*送信済/);
+              if (match) {
+                const sentYear = parseInt(match[1]);
+                const sentMonth = parseInt(match[2]) - 1;
+                const sentDay = parseInt(match[3]);
+                const sentDate = new Date(sentYear, sentMonth, sentDay);
+                const now = new Date();
+                const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
+                const sentDateText = `${match[1]}/${match[2]}/${match[3]}`;
+
+                if (minWeeksVal > 0 && weeksDiff < minWeeksVal) {
+                  return {
+                    uid,
+                    skip: true,
+                    reason: `${sentDateText}送信済（${weeksDiff.toFixed(1)}週間前 < ${minWeeksVal}週間）`
+                  };
+                }
+                break;
+              }
+              // 「X月X日 送付済」旧パターンにもフォールバック
+              const match2 = text.match(/(\d{1,2})[\/月](\d{1,2})[日]?\s*送[信付]済/);
+              if (match2) {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = parseInt(match2[1]) - 1;
+                const day = parseInt(match2[2]);
+                let sentDate = new Date(year, month, day);
+                if (sentDate > now) sentDate = new Date(year - 1, month, day);
+                const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
+
+                if (minWeeksVal > 0 && weeksDiff < minWeeksVal) {
+                  return {
+                    uid,
+                    skip: true,
+                    reason: `${match2[1]}月${match2[2]}日送信済（${weeksDiff.toFixed(1)}週間前 < ${minWeeksVal}週間）`
+                  };
+                }
+                break;
+              }
+              parentEl = parentEl.parentElement;
+            }
+
+            return { uid, skip: false };
+          }, btn, minWeeks);
+
+          if (!btnInfo.uid) continue;
+
+          if (triedUids.has(btnInfo.uid)) continue;
+          allChecked = false;
+
+          if (btnInfo.skip) {
+            triedUids.add(btnInfo.uid);
+            skipCount++;
+            console.log(`  ⏭️ スキップ uid=${btnInfo.uid}: ${btnInfo.reason}`);
+            continue;
           }
+
+          clickedUid = btnInfo.uid;
+          clickedButton = btn;
+          break;
         }
 
         if (!clickedButton) {
-          console.log(`  📋 未送信のボタンなし。完了。`);
+          if (allChecked) {
+            console.log(`  📋 全ボタン処理済み。完了。`);
+          } else {
+            console.log(`  📋 送信可能なボタンなし。完了。`);
+          }
           break;
         }
 
@@ -240,7 +312,6 @@ class MiteneSender {
         if (lastDialogMessage.includes('エラー')) {
           errorCount++;
           console.log(`  ❌ 送信失敗: ${lastDialogMessage}`);
-          // エラー後ページがおかしくなってる可能性 → リロード
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
           continue;
@@ -280,8 +351,12 @@ class MiteneSender {
       }
     }
 
+    if (skipCount > 0) {
+      console.log(`  📊 スキップ合計: ${skipCount}人（${minWeeks}週間以内に送付済み）`);
+    }
+
     await this._screenshot(page, 'mitene-after-send');
-    return { success: sentCount > 0, count: sentCount, errors: errorCount };
+    return { success: sentCount > 0, count: sentCount, errors: errorCount, skipped: skipCount };
   }
 
   // メイン処理
