@@ -215,52 +215,81 @@ class MiteneSender {
 
             const uid = uidMatch[1];
 
-            // ボタンの周辺要素から「送信済」日付を探す
-            // 実際のフォーマット: 「2026/02/11 送信済」
+            // ボタンの周辺要素から送信済み日付を探す
+            // フォーマット例: 「2026/02/11 送信済」「今日」「昨日」「X日前」「X時間前」
             let parentEl = el.parentElement;
             for (let i = 0; i < 8 && parentEl; i++) {
               const text = parentEl.textContent || '';
-              // 「2026/02/11 送信済」「2026/2/11 送信済」パターン
-              const match = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s*送信済/);
-              if (match) {
-                const sentYear = parseInt(match[1]);
-                const sentMonth = parseInt(match[2]) - 1;
-                const sentDay = parseInt(match[3]);
-                const sentDate = new Date(sentYear, sentMonth, sentDay);
-                const now = new Date();
-                const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-                const sentDateText = `${match[1]}/${match[2]}/${match[3]}`;
+              if (!text.match(/送信済/)) { parentEl = parentEl.parentElement; continue; }
 
-                if (minWeeksVal > 0 && weeksDiff < minWeeksVal) {
+              const now = new Date();
+              let sentDate = null;
+              let sentLabel = '';
+
+              // パターン1: 「2026/02/11 送信済」（年月日フル）
+              const m1 = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s*送信済/);
+              if (m1) {
+                sentDate = new Date(parseInt(m1[1]), parseInt(m1[2]) - 1, parseInt(m1[3]));
+                sentLabel = `${m1[1]}/${m1[2]}/${m1[3]}`;
+              }
+              // パターン2: 「02/11 送信済」「2/11 送信済」（年なし月日）
+              if (!sentDate) {
+                const m2 = text.match(/(\d{1,2})[\/](\d{1,2})\s*送信済/);
+                if (m2) {
+                  const y = now.getFullYear();
+                  sentDate = new Date(y, parseInt(m2[1]) - 1, parseInt(m2[2]));
+                  if (sentDate > now) sentDate = new Date(y - 1, parseInt(m2[1]) - 1, parseInt(m2[2]));
+                  sentLabel = `${m2[1]}/${m2[2]}`;
+                }
+              }
+              // パターン3: 「X月X日 送信済」
+              if (!sentDate) {
+                const m3 = text.match(/(\d{1,2})月(\d{1,2})日\s*送信済/);
+                if (m3) {
+                  const y = now.getFullYear();
+                  sentDate = new Date(y, parseInt(m3[1]) - 1, parseInt(m3[2]));
+                  if (sentDate > now) sentDate = new Date(y - 1, parseInt(m3[1]) - 1, parseInt(m3[2]));
+                  sentLabel = `${m3[1]}月${m3[2]}日`;
+                }
+              }
+              // パターン4: 「今日 送信済」「本日 送信済」
+              if (!sentDate && text.match(/(今日|本日)\s*送信済/)) {
+                sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                sentLabel = '今日';
+              }
+              // パターン5: 「昨日 送信済」
+              if (!sentDate && text.match(/昨日\s*送信済/)) {
+                sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                sentLabel = '昨日';
+              }
+              // パターン6: 「X日前 送信済」
+              if (!sentDate) {
+                const m6 = text.match(/(\d+)日前\s*送信済/);
+                if (m6) {
+                  sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - parseInt(m6[1]));
+                  sentLabel = `${m6[1]}日前`;
+                }
+              }
+              // パターン7: 「X時間前 送信済」（今日扱い）
+              if (!sentDate) {
+                const m7 = text.match(/(\d+)時間前\s*送信済/);
+                if (m7) {
+                  sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  sentLabel = `${m7[1]}時間前`;
+                }
+              }
+
+              if (sentDate && minWeeksVal > 0) {
+                const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
+                if (weeksDiff < minWeeksVal) {
                   return {
                     uid,
                     skip: true,
-                    reason: `${sentDateText}送信済（${weeksDiff.toFixed(1)}週間前 < ${minWeeksVal}週間）`
+                    reason: `${sentLabel}送信済（${weeksDiff.toFixed(1)}週間前 < ${minWeeksVal}週間）`
                   };
                 }
-                break;
               }
-              // 「X月X日 送付済」旧パターンにもフォールバック
-              const match2 = text.match(/(\d{1,2})[\/月](\d{1,2})[日]?\s*送[信付]済/);
-              if (match2) {
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = parseInt(match2[1]) - 1;
-                const day = parseInt(match2[2]);
-                let sentDate = new Date(year, month, day);
-                if (sentDate > now) sentDate = new Date(year - 1, month, day);
-                const weeksDiff = (now - sentDate) / (7 * 24 * 60 * 60 * 1000);
-
-                if (minWeeksVal > 0 && weeksDiff < minWeeksVal) {
-                  return {
-                    uid,
-                    skip: true,
-                    reason: `${match2[1]}月${match2[2]}日送信済（${weeksDiff.toFixed(1)}週間前 < ${minWeeksVal}週間）`
-                  };
-                }
-                break;
-              }
-              parentEl = parentEl.parentElement;
+              break;
             }
 
             return { uid, skip: false };
