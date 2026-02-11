@@ -416,24 +416,28 @@ const App = {
 
   async saveMiteneAccount(e) {
     e.preventDefault();
-    const id = document.getElementById('mitene-acc-id').value;
-    const data = {
-      name: document.getElementById('mitene-acc-name').value,
-      loginUrl: document.getElementById('mitene-acc-loginUrl').value,
-      loginId: document.getElementById('mitene-acc-loginId').value,
-      loginPassword: document.getElementById('mitene-acc-loginPassword').value || '***',
-      schedule: document.getElementById('mitene-acc-schedule').value,
-      active: true
-    };
+    try {
+      const id = document.getElementById('mitene-acc-id').value;
+      const data = {
+        name: document.getElementById('mitene-acc-name').value,
+        loginUrl: document.getElementById('mitene-acc-loginUrl').value,
+        loginId: document.getElementById('mitene-acc-loginId').value,
+        loginPassword: document.getElementById('mitene-acc-loginPassword').value || '***',
+        schedule: document.getElementById('mitene-acc-schedule').value,
+        active: true
+      };
 
-    if (id) {
-      await this.api(`/mitene-accounts/${id}`, 'PUT', data);
-    } else {
-      await this.api('/mitene-accounts', 'POST', data);
+      if (id) {
+        await this.api(`/mitene-accounts/${id}`, 'PUT', data);
+      } else {
+        await this.api('/mitene-accounts', 'POST', data);
+      }
+
+      this.closeModal('modal-mitene-account');
+      this.loadMitene();
+    } catch (err) {
+      alert('保存エラー: ' + err.message);
     }
-
-    this.closeModal('modal-mitene-account');
-    this.loadMitene();
   },
 
   async deleteMiteneAccount(id, name) {
