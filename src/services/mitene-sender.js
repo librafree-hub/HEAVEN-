@@ -143,7 +143,7 @@ class MiteneSender {
     return remaining;
   }
 
-  // ステップ3: ランダムにタブを選んでからregistComeon(uid)で送る
+  // ステップ3: ランダムにタブを選んでからキテネボタンをクリック
   async _sendToMembers(page, maxSends, minWeeks) {
     console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
 
@@ -187,53 +187,69 @@ class MiteneSender {
       }
     }
 
-    // registComeon(uid) のuidを全部取得
-    const uids = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper');
-      const ids = [];
-      for (const btn of buttons) {
-        const onclick = btn.getAttribute('onclick') || '';
-        const match = onclick.match(/registComeon\((\d+)\)/);
-        if (match) ids.push(match[1]);
-      }
-      // クラス名で見つからない場合、onclick属性で探す
-      if (ids.length === 0) {
-        const allLinks = document.querySelectorAll('a[onclick*="registComeon"]');
-        for (const link of allLinks) {
-          const onclick = link.getAttribute('onclick') || '';
-          const match = onclick.match(/registComeon\((\d+)\)/);
-          if (match) ids.push(match[1]);
-        }
-      }
-      return ids;
-    });
-
-    console.log(`  📋 送信対象: ${uids.length}人 (uid: ${uids.join(', ')})`);
-
-    if (uids.length === 0) {
-      console.log(`  ⚠️ 送信対象が見つかりません。`);
-      return { success: false, count: 0, error: '送信対象が見つかりません' };
-    }
-
     let sentCount = 0;
+    let errorCount = 0;
+    const triedUids = new Set();
 
-    for (let i = 0; i < uids.length && sentCount < maxSends; i++) {
-      const uid = uids[i];
+    // 送信ループ: ページから毎回ボタンを探して1つクリック → 戻る → 繰り返し
+    for (let attempt = 0; attempt < maxSends + errorCount && sentCount < maxSends; attempt++) {
       try {
-        console.log(`  🖱️ registComeon(${uid}) 呼び出し中... (${sentCount + 1}/${maxSends})`);
+        // ページ上のキテネ送信ボタンを取得（Puppeteer ElementHandle）
+        const buttons = await page.$$('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]');
 
-        // registComeon(uid) を直接呼び出す → confirm("キテネしますか？") が出る → 自動承認
-        await page.evaluate((id) => {
-          registComeon(parseInt(id));
-        }, uid);
+        if (buttons.length === 0) {
+          console.log(`  📋 送信ボタンなし。完了。`);
+          break;
+        }
 
-        // confirm ダイアログは page.on('dialog') で自動承認
-        await this._wait(3000);
+        // まだ試してないボタンを探す
+        let clickedButton = null;
+        let clickedUid = null;
+        for (const btn of buttons) {
+          const onclick = await page.evaluate(el => el.getAttribute('onclick') || '', btn);
+          const uidMatch = onclick.match(/registComeon\((\d+)\)/);
+          if (uidMatch && !triedUids.has(uidMatch[1])) {
+            clickedUid = uidMatch[1];
+            clickedButton = btn;
+            break;
+          }
+        }
+
+        if (!clickedButton) {
+          console.log(`  📋 未送信のボタンなし。完了。`);
+          break;
+        }
+
+        triedUids.add(clickedUid);
+        console.log(`  🖱️ ボタンクリック uid=${clickedUid} (${sentCount + 1}/${maxSends})`);
+
+        // ダイアログ追跡（エラー検知用）
+        let lastDialogMessage = '';
+        const dialogTracker = (dialog) => {
+          lastDialogMessage = dialog.message();
+        };
+        page.on('dialog', dialogTracker);
+
+        // Puppeteerのネイティブクリック（実際のマウスイベント）
+        await clickedButton.click();
+        await this._wait(4000);
+
+        page.off('dialog', dialogTracker);
+
+        // エラー判定
+        if (lastDialogMessage.includes('エラー')) {
+          errorCount++;
+          console.log(`  ❌ 送信失敗: ${lastDialogMessage}`);
+          // エラー後ページがおかしくなってる可能性 → リロード
+          await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+          await this._wait(2000);
+          continue;
+        }
 
         // ページ遷移が発生した場合、会員リストに戻る
-        const currentUrl = page.url();
-        if (currentUrl !== memberListUrl) {
-          console.log(`  📍 遷移検知: ${currentUrl}`);
+        const afterUrl = page.url();
+        if (afterUrl !== memberListUrl) {
+          console.log(`  📍 遷移検知: ${afterUrl}`);
           console.log(`  🔙 会員リストに戻る...`);
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
@@ -252,8 +268,8 @@ class MiteneSender {
           }
         }
       } catch (e) {
-        console.log(`  ⚠️ uid=${uid} 送信エラー: ${e.message}`);
-        // エラー時も会員リストに戻って続行
+        console.log(`  ⚠️ 送信エラー: ${e.message}`);
+        errorCount++;
         try {
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await this._wait(2000);
@@ -265,7 +281,7 @@ class MiteneSender {
     }
 
     await this._screenshot(page, 'mitene-after-send');
-    return { success: sentCount > 0, count: sentCount };
+    return { success: sentCount > 0, count: sentCount, errors: errorCount };
   }
 
   // メイン処理
