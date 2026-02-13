@@ -292,12 +292,17 @@ router.post('/mitene/random-send', (req, res) => {
     return res.status(400).json({ error: 'アカウントが選択されていません' });
   }
 
-  // 時間帯をパース
+  // 時間帯をパース（日またぎ対応）
   const [fromH, fromM] = (from || '10:00').split(':').map(Number);
-  const [toH, toM] = (to || '22:00').split(':').map(Number);
+  const [toH, toM] = (to || '09:00').split(':').map(Number);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), fromH, fromM);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), toH, toM);
+  let todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), toH, toM);
+
+  // 終了が開始より前なら翌日扱い（例: 10:00〜翌9:00）
+  if (todayEnd <= todayStart) {
+    todayEnd.setDate(todayEnd.getDate() + 1);
+  }
 
   // 現在時刻が開始時刻より前なら開始時刻から、過ぎていたら現在時刻から
   const rangeStart = now > todayStart ? now : todayStart;
@@ -322,14 +327,16 @@ router.post('/mitene/random-send', (req, res) => {
   // 時刻順にソート
   scheduled.sort((a, b) => a.sendTime - b.sendTime);
 
-  const scheduledTimes = scheduled.map(s => ({
-    name: s.name,
-    time: s.sendTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-  }));
+  const today = now.getDate();
+  const scheduledTimes = scheduled.map(s => {
+    const t = s.sendTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    const isNextDay = s.sendTime.getDate() !== today;
+    return { name: s.name, time: isNextDay ? `翌${t}` : t };
+  });
 
   console.log('🎲 ランダム送信予約:');
-  scheduled.forEach(s => {
-    console.log(`  ${s.name}: ${s.sendTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`);
+  scheduledTimes.forEach(s => {
+    console.log(`  ${s.name}: ${s.time}`);
   });
 
   res.json({ message: 'ランダム送信を予約しました', scheduledTimes });
