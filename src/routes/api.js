@@ -7,6 +7,7 @@ const imageManager = require('../services/image-manager');
 const scheduler = require('../services/scheduler');
 const miteneScheduler = require('../services/mitene-scheduler');
 const diaryScraper = require('../services/diary-scraper');
+const gitSync = require('../services/git-sync');
 
 const router = express.Router();
 
@@ -46,6 +47,7 @@ function saveAccounts(accounts) {
   const dir = path.dirname(ACCOUNTS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), 'utf-8');
+  gitSync.push('写メ日記アカウント更新');
 }
 
 router.get('/accounts', (req, res) => {
@@ -209,6 +211,7 @@ function saveMiteneAccounts(accounts) {
   const dir = path.dirname(MITENE_ACCOUNTS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(MITENE_ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), 'utf-8');
+  gitSync.push('ミテネアカウント更新');
 }
 
 // ミテネアカウント一覧
@@ -330,6 +333,7 @@ router.put('/settings', (req, res) => {
     } catch (e) { /* 無視 */ }
   }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(req.body, null, 2), 'utf-8');
+  gitSync.push('設定更新');
   res.json(req.body);
 });
 
