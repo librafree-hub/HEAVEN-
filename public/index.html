@@ -331,6 +331,22 @@
       <div id="page-settings" class="page">
         <h2>設定</h2>
 
+        <!-- Gemini APIキー設定（設定ページの一番上） -->
+        <div class="card">
+          <h3>Gemini AI APIキー</h3>
+          <div class="form-group">
+            <label>APIキー</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="password" id="set-apiKey" placeholder="Gemini APIキーを入力" style="flex:1;">
+              <button type="button" class="btn btn-primary" onclick="App.saveApiKey()">保存</button>
+            </div>
+            <small id="apikey-status" style="margin-top:4px; display:block;">確認中...</small>
+            <small style="margin-top:2px; display:block; color:#888;">
+              APIキーは <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a> で無料で取得できます
+            </small>
+          </div>
+        </div>
+
         <form id="form-settings" onsubmit="App.saveSettings(event)">
           <div class="card">
             <h3>写メ日記 設定</h3>

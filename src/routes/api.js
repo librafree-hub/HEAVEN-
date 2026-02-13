@@ -315,6 +315,58 @@ router.put('/settings', (req, res) => {
   res.json(req.body);
 });
 
+// === Gemini APIキー管理 ===
+
+const ENV_PATH = path.join(__dirname, '../../.env');
+
+router.get('/apikey', (req, res) => {
+  const key = process.env.GEMINI_API_KEY;
+  if (key && key !== 'your_gemini_api_key_here') {
+    // マスクして返す（先頭5文字 + *** + 末尾3文字）
+    const masked = key.length > 10
+      ? key.substring(0, 5) + '***' + key.substring(key.length - 3)
+      : '***設定済み***';
+    res.json({ set: true, masked });
+  } else {
+    res.json({ set: false, masked: '' });
+  }
+});
+
+router.put('/apikey', (req, res) => {
+  try {
+    const newKey = (req.body.apiKey || '').trim();
+    if (!newKey) return res.status(400).json({ error: 'APIキーが空です' });
+
+    // .envファイルを読み込み or 新規作成
+    let envContent = '';
+    if (fs.existsSync(ENV_PATH)) {
+      envContent = fs.readFileSync(ENV_PATH, 'utf-8');
+    }
+
+    // GEMINI_API_KEY行を更新または追加
+    if (envContent.match(/^GEMINI_API_KEY=.*/m)) {
+      envContent = envContent.replace(/^GEMINI_API_KEY=.*/m, `GEMINI_API_KEY=${newKey}`);
+    } else {
+      envContent = envContent.trim() + (envContent.trim() ? '\n' : '') + `GEMINI_API_KEY=${newKey}\n`;
+    }
+
+    fs.writeFileSync(ENV_PATH, envContent, 'utf-8');
+
+    // プロセス環境変数も即座に更新
+    process.env.GEMINI_API_KEY = newKey;
+
+    // AIジェネレーターのモデルキャッシュをリセット
+    try {
+      const aiGenerator = require('../services/ai-generator');
+      aiGenerator.model = null;
+    } catch (e) { /* 無視 */ }
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // === ブラウザテスト ===
 
 router.post('/test/browser', async (req, res) => {

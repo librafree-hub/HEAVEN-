@@ -613,6 +613,44 @@ const App = {
     document.getElementById('set-visibility').value = settings.visibility || 'public';
     document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 10;
     document.getElementById('set-miteneMinWeeks').value = settings.miteneMinWeeks || 0;
+
+    // APIキーのステータスを読み込み
+    this.loadApiKeyStatus();
+  },
+
+  async loadApiKeyStatus() {
+    try {
+      const result = await this.api('/apikey');
+      const statusEl = document.getElementById('apikey-status');
+      const inputEl = document.getElementById('set-apiKey');
+      if (result.set) {
+        statusEl.innerHTML = '<span style="color:#22c55e;">&#10003; 設定済み: ' + result.masked + '</span>';
+        inputEl.placeholder = '設定済み（変更する場合のみ入力）';
+      } else {
+        statusEl.innerHTML = '<span style="color:#ef4444;">&#10007; 未設定 - APIキーを入力してください</span>';
+        inputEl.placeholder = 'Gemini APIキーを入力';
+      }
+    } catch (e) {
+      document.getElementById('apikey-status').textContent = 'ステータス取得失敗';
+    }
+  },
+
+  async saveApiKey() {
+    const key = document.getElementById('set-apiKey').value.trim();
+    if (!key) { alert('APIキーを入力してください'); return; }
+
+    try {
+      const result = await this.api('/apikey', 'PUT', { apiKey: key });
+      if (result.error) {
+        alert('保存失敗: ' + result.error);
+      } else {
+        document.getElementById('set-apiKey').value = '';
+        alert('APIキーを保存しました');
+        this.loadApiKeyStatus();
+      }
+    } catch (e) {
+      alert('保存エラー: ' + e.message);
+    }
   },
 
   async saveSettings(e) {
