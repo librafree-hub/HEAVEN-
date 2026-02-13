@@ -605,6 +605,8 @@ const App = {
   // =============================================
   async loadSettings() {
     const settings = await this.api('/settings');
+    document.getElementById('set-geminiApiKey').value = '';
+    document.getElementById('set-geminiApiKey').placeholder = settings.geminiApiKey ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力';
     document.getElementById('set-minChars').value = settings.minChars || 450;
     document.getElementById('set-maxChars').value = settings.maxChars || 1000;
     document.getElementById('set-schedule').value = settings.schedule || '0 */3 8-23 * * *';
@@ -613,44 +615,6 @@ const App = {
     document.getElementById('set-visibility').value = settings.visibility || 'public';
     document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 10;
     document.getElementById('set-miteneMinWeeks').value = settings.miteneMinWeeks || 0;
-
-    // APIキーのステータスを読み込み
-    this.loadApiKeyStatus();
-  },
-
-  async loadApiKeyStatus() {
-    try {
-      const result = await this.api('/apikey');
-      const statusEl = document.getElementById('apikey-status');
-      const inputEl = document.getElementById('set-apiKey');
-      if (result.set) {
-        statusEl.innerHTML = '<span style="color:#22c55e;">&#10003; 設定済み: ' + result.masked + '</span>';
-        inputEl.placeholder = '設定済み（変更する場合のみ入力）';
-      } else {
-        statusEl.innerHTML = '<span style="color:#ef4444;">&#10007; 未設定 - APIキーを入力してください</span>';
-        inputEl.placeholder = 'Gemini APIキーを入力';
-      }
-    } catch (e) {
-      document.getElementById('apikey-status').textContent = 'ステータス取得失敗';
-    }
-  },
-
-  async saveApiKey() {
-    const key = document.getElementById('set-apiKey').value.trim();
-    if (!key) { alert('APIキーを入力してください'); return; }
-
-    try {
-      const result = await this.api('/apikey', 'PUT', { apiKey: key });
-      if (result.error) {
-        alert('保存失敗: ' + result.error);
-      } else {
-        document.getElementById('set-apiKey').value = '';
-        alert('APIキーを保存しました');
-        this.loadApiKeyStatus();
-      }
-    } catch (e) {
-      alert('保存エラー: ' + e.message);
-    }
   },
 
   async saveSettings(e) {
@@ -665,6 +629,9 @@ const App = {
       miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 10,
       miteneMinWeeks: parseInt(document.getElementById('set-miteneMinWeeks').value) || 0
     };
+    // APIキーが入力されてる場合のみ保存
+    const apiKey = document.getElementById('set-geminiApiKey').value.trim();
+    if (apiKey) data.geminiApiKey = apiKey;
     await this.api('/settings', 'PUT', data);
     alert('設定を保存しました');
   },

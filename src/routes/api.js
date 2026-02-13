@@ -295,7 +295,10 @@ const SETTINGS_PATH = path.join(__dirname, '../../config/settings.json');
 router.get('/settings', (req, res) => {
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
-      res.json(JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')));
+      const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+      // APIキーはマスクして返す（フロントにそのまま返さない）
+      if (settings.geminiApiKey) settings.geminiApiKey = '***';
+      res.json(settings);
     } else {
       res.json({
         minChars: 450, maxChars: 1000,
@@ -311,61 +314,25 @@ router.get('/settings', (req, res) => {
 router.put('/settings', (req, res) => {
   const dir = path.dirname(SETTINGS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  // APIキーが送られてきた場合、既存設定とマージ
+  if (req.body.geminiApiKey) {
+    try {
+      const existing = fs.existsSync(SETTINGS_PATH) ? JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) : {};
+      req.body.geminiApiKey = req.body.geminiApiKey || existing.geminiApiKey;
+    } catch (e) { /* 無視 */ }
+    // AIモデルキャッシュをリセット
+    try { require('../services/ai-generator').model = null; } catch (e) { /* 無視 */ }
+  } else {
+    // APIキーが送られてない場合は既存のキーを保持
+    try {
+      const existing = fs.existsSync(SETTINGS_PATH) ? JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) : {};
+      if (existing.geminiApiKey) req.body.geminiApiKey = existing.geminiApiKey;
+    } catch (e) { /* 無視 */ }
+  }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(req.body, null, 2), 'utf-8');
   res.json(req.body);
 });
 
-// === Gemini APIキー管理 ===
-
-const ENV_PATH = path.join(__dirname, '../../.env');
-
-router.get('/apikey', (req, res) => {
-  const key = process.env.GEMINI_API_KEY;
-  if (key && key !== 'your_gemini_api_key_here') {
-    // マスクして返す（先頭5文字 + *** + 末尾3文字）
-    const masked = key.length > 10
-      ? key.substring(0, 5) + '***' + key.substring(key.length - 3)
-      : '***設定済み***';
-    res.json({ set: true, masked });
-  } else {
-    res.json({ set: false, masked: '' });
-  }
-});
-
-router.put('/apikey', (req, res) => {
-  try {
-    const newKey = (req.body.apiKey || '').trim();
-    if (!newKey) return res.status(400).json({ error: 'APIキーが空です' });
-
-    // .envファイルを読み込み or 新規作成
-    let envContent = '';
-    if (fs.existsSync(ENV_PATH)) {
-      envContent = fs.readFileSync(ENV_PATH, 'utf-8');
-    }
-
-    // GEMINI_API_KEY行を更新または追加
-    if (envContent.match(/^GEMINI_API_KEY=.*/m)) {
-      envContent = envContent.replace(/^GEMINI_API_KEY=.*/m, `GEMINI_API_KEY=${newKey}`);
-    } else {
-      envContent = envContent.trim() + (envContent.trim() ? '\n' : '') + `GEMINI_API_KEY=${newKey}\n`;
-    }
-
-    fs.writeFileSync(ENV_PATH, envContent, 'utf-8');
-
-    // プロセス環境変数も即座に更新
-    process.env.GEMINI_API_KEY = newKey;
-
-    // AIジェネレーターのモデルキャッシュをリセット
-    try {
-      const aiGenerator = require('../services/ai-generator');
-      aiGenerator.model = null;
-    } catch (e) { /* 無視 */ }
-
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // === ブラウザテスト ===
 

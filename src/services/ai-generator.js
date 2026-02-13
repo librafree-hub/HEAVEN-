@@ -9,9 +9,11 @@ class AIGenerator {
 
   _getModel() {
     if (!this.model) {
-      const apiKey = process.env.GEMINI_API_KEY;
+      // settings.json → .env の順で探す
+      const settings = this._loadSettings();
+      const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-        throw new Error('GEMINI_API_KEYが設定されていません。.envファイルを確認してください。');
+        throw new Error('GEMINI_API_KEYが設定されていません。設定ページでAPIキーを入力してください。');
       }
       const genAI = new GoogleGenerativeAI(apiKey);
       const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
