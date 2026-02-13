@@ -222,6 +222,7 @@ const App = {
     } else {
       el.innerHTML = `<div class="mitene-accounts-grid">${accounts.map(a => `
         <div class="mitene-account-row">
+          <input type="checkbox" class="mitene-select-cb" value="${a.id}" style="margin-right:8px; cursor:pointer;">
           <span class="mitene-account-name">${this.esc(a.name)}</span>
           <span class="mitene-account-info">
             ${a.loginId ? 'ID設定済' : '<span class="text-danger">ID未設定</span>'}
@@ -386,6 +387,27 @@ const App = {
       await this.api('/mitene/scheduler/stop', 'POST');
     } else {
       await this.api('/mitene/scheduler/start', 'POST');
+    }
+    await this.updateMitenePanel();
+  },
+
+  // === ミテネ 全選択・ランダム送信 ===
+
+  toggleMiteneSelectAll() {
+    const checked = document.getElementById('mitene-select-all').checked;
+    document.querySelectorAll('.mitene-select-cb').forEach(cb => cb.checked = checked);
+  },
+
+  async miteneRandomSend() {
+    const selected = [...document.querySelectorAll('.mitene-select-cb:checked')].map(cb => cb.value);
+    if (selected.length === 0) { alert('送信する子を選択してください'); return; }
+    if (!confirm(`${selected.length}人をランダムな間隔で送信します。よろしいですか？`)) return;
+
+    const result = await this.api('/mitene/random-send', 'POST', { accountIds: selected });
+    if (result.error) {
+      alert('エラー: ' + result.error);
+    } else {
+      alert(`${selected.length}人のランダム送信を開始しました。\n順番と間隔はランダムです。`);
     }
     await this.updateMitenePanel();
   },

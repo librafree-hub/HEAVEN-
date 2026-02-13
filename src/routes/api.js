@@ -285,6 +285,34 @@ router.post('/mitene/scheduler/stop', (req, res) => {
   res.json({ success: true, status: miteneScheduler.getStatus() });
 });
 
+// 選択した子をランダム間隔で送信
+router.post('/mitene/random-send', async (req, res) => {
+  const { accountIds } = req.body;
+  if (!accountIds || accountIds.length === 0) {
+    return res.status(400).json({ error: 'アカウントが選択されていません' });
+  }
+
+  res.json({ message: `${accountIds.length}人のランダム送信を開始しました` });
+
+  // シャッフルしてランダム順で送信
+  const shuffled = [...accountIds].sort(() => Math.random() - 0.5);
+  (async () => {
+    for (let i = 0; i < shuffled.length; i++) {
+      if (i > 0) {
+        // 1〜5分のランダム間隔
+        const delay = Math.floor(Math.random() * 4 * 60 + 60) * 1000;
+        const min = Math.floor(delay / 60000);
+        const sec = Math.floor((delay % 60000) / 1000);
+        console.log(`  ⏳ 次の送信まで ${min}分${sec}秒待機...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+      console.log(`  🎲 ランダム送信 (${i + 1}/${shuffled.length}): ${shuffled[i]}`);
+      await miteneScheduler.runSingle(shuffled[i]).catch(e => console.error('ミテネエラー:', e));
+    }
+    console.log('  ✅ ランダム送信完了');
+  })();
+});
+
 // 単一アカウントミテネ送信（パラメータルートは最後）
 router.post('/mitene/send/:accountId', async (req, res) => {
   const result = await miteneScheduler.runSingle(req.params.accountId);

@@ -228,6 +228,7 @@
         <!-- 操作ボタン -->
         <div class="action-bar">
           <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">今すぐ全員送信</button>
+          <button class="btn btn-mitene" onclick="App.miteneRandomSend()">選択した子をランダム送信</button>
           <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
           <span id="mitene-scheduler-status" class="status-badge">停止中</span>
         </div>
@@ -235,7 +236,10 @@
         <!-- アカウント管理（ミテネ専用） -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="margin-bottom:0;">ミテネ アカウント</h3>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <h3 style="margin-bottom:0;">ミテネ アカウント</h3>
+              <label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="mitene-select-all" onchange="App.toggleMiteneSelectAll()"> 全選択</label>
+            </div>
             <button class="btn btn-sm btn-mitene" onclick="App.showAddMiteneAccount()">+ 追加</button>
           </div>
           <div id="mitene-accounts-list">読み込み中...</div>
