@@ -20,8 +20,7 @@ const App = {
         link.classList.add('active');
 
         if (page === 'dashboard') this.loadDashboard();
-        if (page === 'accounts') this.loadAccounts();
-        if (page === 'posts') this.loadPosts();
+        if (page === 'diary') this.loadDiaryPage();
         if (page === 'settings') this.loadSettings();
       });
     });
@@ -62,6 +61,32 @@ const App = {
     // 最近の投稿
     const posts = await this.api('/posts?limit=10');
     document.getElementById('recent-posts').innerHTML = this.renderPostsTable(posts);
+  },
+
+  // === 写メ日記ページ ===
+  async loadDiaryPage() {
+    // 現在のサブタブを確認して該当コンテンツ読み込み
+    const activeTab = document.querySelector('#page-diary .sub-tab.active');
+    const tab = activeTab ? activeTab.dataset.subtab : 'diary-accounts';
+    this._loadSubTabContent(tab);
+  },
+
+  switchSubTab(page, subtab) {
+    // サブタブボタン切り替え
+    document.querySelectorAll(`#page-${page} .sub-tab`).forEach(t => t.classList.remove('active'));
+    document.querySelector(`[data-subtab="${subtab}"]`).classList.add('active');
+
+    // コンテンツ切り替え
+    document.querySelectorAll(`#page-${page} .subtab-content`).forEach(c => c.classList.remove('active'));
+    document.getElementById(`subtab-${subtab}`).classList.add('active');
+
+    this._loadSubTabContent(subtab);
+  },
+
+  _loadSubTabContent(subtab) {
+    if (subtab === 'diary-accounts') this.loadAccounts();
+    if (subtab === 'diary-schedule') this.loadBulkSchedule();
+    if (subtab === 'diary-posts') this.loadPosts();
   },
 
   // === アカウント管理 ===
@@ -321,7 +346,7 @@ const App = {
   // === 一括スケジュール ===
   _bulkAccounts: [],
 
-  async showBulkSchedule() {
+  async loadBulkSchedule() {
     const accounts = await this.api('/accounts');
     this._bulkAccounts = accounts.map(a => ({
       id: a.id,
@@ -331,7 +356,6 @@ const App = {
     }));
     this.renderBulkSchedule();
     document.getElementById('bulk-check-all').checked = true;
-    document.getElementById('modal-bulk-schedule').style.display = 'flex';
   },
 
   renderBulkSchedule() {
@@ -398,8 +422,6 @@ const App = {
     for (const a of this._bulkAccounts) {
       await this.api(`/accounts/${a.id}`, 'PUT', { scheduleTimes: a.scheduleTimes });
     }
-    this.closeModal('modal-bulk-schedule');
-    this.loadAccounts();
     alert('全アカウントのスケジュールを保存しました');
   },
 

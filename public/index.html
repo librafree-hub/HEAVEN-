@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HEAVEN - 自動日記投稿システム</title>
+  <title>HEAVEN - 自動投稿システム</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -12,12 +12,11 @@
     <nav class="sidebar">
       <div class="sidebar-header">
         <h1>HEAVEN</h1>
-        <p>自動日記投稿</p>
+        <p>自動投稿システム</p>
       </div>
       <ul class="nav-menu">
         <li><a href="#" data-page="dashboard" class="active">ダッシュボード</a></li>
-        <li><a href="#" data-page="accounts">アカウント管理</a></li>
-        <li><a href="#" data-page="posts">投稿履歴</a></li>
+        <li><a href="#" data-page="diary" class="nav-feature">写メ日記 自動投稿</a></li>
         <li><a href="#" data-page="settings">設定</a></li>
       </ul>
     </nav>
@@ -60,14 +59,67 @@
         </div>
       </div>
 
-      <!-- アカウント管理 -->
-      <div id="page-accounts" class="page">
-        <h2>アカウント管理</h2>
+      <!-- 写メ日記 自動投稿 -->
+      <div id="page-diary" class="page">
+        <h2>写メ日記 自動投稿</h2>
 
-        <button class="btn btn-primary" onclick="App.showAddAccount()">+ アカウント追加</button>
-        <button class="btn btn-secondary" onclick="App.showBulkSchedule()">一括スケジュール設定</button>
+        <!-- サブタブ -->
+        <div class="sub-tabs">
+          <button class="sub-tab active" data-subtab="diary-accounts" onclick="App.switchSubTab('diary', 'diary-accounts')">アカウント管理</button>
+          <button class="sub-tab" data-subtab="diary-schedule" onclick="App.switchSubTab('diary', 'diary-schedule')">一括スケジュール</button>
+          <button class="sub-tab" data-subtab="diary-posts" onclick="App.switchSubTab('diary', 'diary-posts')">投稿履歴</button>
+        </div>
 
-        <div id="accounts-list" class="accounts-grid">読み込み中...</div>
+        <!-- サブタブ: アカウント管理 -->
+        <div id="subtab-diary-accounts" class="subtab-content active">
+          <div class="action-bar">
+            <button class="btn btn-primary" onclick="App.showAddAccount()">+ アカウント追加</button>
+          </div>
+
+          <div id="accounts-list" class="accounts-grid">読み込み中...</div>
+        </div>
+
+        <!-- サブタブ: 一括スケジュール -->
+        <div id="subtab-diary-schedule" class="subtab-content">
+          <div class="bulk-add-section">
+            <p>時刻を選んで、追加したいアカウントにチェックを入れて「追加」</p>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+              <select id="bulk-addHour" style="width:auto;">
+                <option value="0">0</option><option value="1">1</option><option value="2">2</option>
+                <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                <option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                <option value="9">9</option><option value="10">10</option><option value="11">11</option>
+                <option value="12">12</option><option value="13">13</option><option value="14">14</option>
+                <option value="15">15</option><option value="16">16</option><option value="17">17</option>
+                <option value="18">18</option><option value="19">19</option><option value="20">20</option>
+                <option value="21">21</option><option value="22">22</option><option value="23">23</option>
+              </select>
+              <span>時</span>
+              <select id="bulk-addMin" style="width:auto;">
+                <option value="00">00</option><option value="10">10</option><option value="20">20</option>
+                <option value="30">30</option><option value="40">40</option><option value="50">50</option>
+              </select>
+              <span>分</span>
+              <button type="button" class="btn btn-sm btn-primary" onclick="App.bulkAddTime()">選択中に追加</button>
+              <button type="button" class="btn btn-sm btn-danger" onclick="App.bulkRemoveTime()">選択中から削除</button>
+              <label class="toggle-label" style="margin-left:8px;">
+                <input type="checkbox" id="bulk-check-all" onchange="App.bulkToggleAll(this.checked)">
+                <span>全選択</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="bulk-schedule-list" class="bulk-schedule-list" style="margin-top:16px;"></div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary" onclick="App.bulkSave()">一括保存</button>
+          </div>
+        </div>
+
+        <!-- サブタブ: 投稿履歴 -->
+        <div id="subtab-diary-posts" class="subtab-content">
+          <div id="posts-list">読み込み中...</div>
+        </div>
 
         <!-- アカウント編集モーダル -->
         <div id="modal-account" class="modal" style="display:none;">
@@ -205,56 +257,6 @@
             <div id="image-list" class="image-grid"></div>
           </div>
         </div>
-        <!-- 一括スケジュール設定モーダル -->
-        <div id="modal-bulk-schedule" class="modal" style="display:none;">
-          <div class="modal-content modal-wide">
-            <div class="modal-header">
-              <h3>一括スケジュール設定</h3>
-              <button class="btn-close" onclick="App.closeModal('modal-bulk-schedule')">&times;</button>
-            </div>
-
-            <div class="bulk-add-section">
-              <p>時刻を選んで、追加したいアカウントにチェックを入れて「追加」</p>
-              <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-                <select id="bulk-addHour" style="width:auto;">
-                  <option value="0">0</option><option value="1">1</option><option value="2">2</option>
-                  <option value="3">3</option><option value="4">4</option><option value="5">5</option>
-                  <option value="6">6</option><option value="7">7</option><option value="8">8</option>
-                  <option value="9">9</option><option value="10">10</option><option value="11">11</option>
-                  <option value="12">12</option><option value="13">13</option><option value="14">14</option>
-                  <option value="15">15</option><option value="16">16</option><option value="17">17</option>
-                  <option value="18">18</option><option value="19">19</option><option value="20">20</option>
-                  <option value="21">21</option><option value="22">22</option><option value="23">23</option>
-                </select>
-                <span>時</span>
-                <select id="bulk-addMin" style="width:auto;">
-                  <option value="00">00</option><option value="10">10</option><option value="20">20</option>
-                  <option value="30">30</option><option value="40">40</option><option value="50">50</option>
-                </select>
-                <span>分</span>
-                <button type="button" class="btn btn-sm btn-primary" onclick="App.bulkAddTime()">選択中に追加</button>
-                <button type="button" class="btn btn-sm btn-danger" onclick="App.bulkRemoveTime()">選択中から削除</button>
-                <label class="toggle-label" style="margin-left:8px;">
-                  <input type="checkbox" id="bulk-check-all" onchange="App.bulkToggleAll(this.checked)">
-                  <span>全選択</span>
-                </label>
-              </div>
-            </div>
-
-            <div id="bulk-schedule-list" class="bulk-schedule-list" style="margin-top:16px;"></div>
-
-            <div class="form-actions">
-              <button type="button" class="btn btn-primary" onclick="App.bulkSave()">一括保存</button>
-              <button type="button" class="btn btn-secondary" onclick="App.closeModal('modal-bulk-schedule')">キャンセル</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 投稿履歴 -->
-      <div id="page-posts" class="page">
-        <h2>投稿履歴</h2>
-        <div id="posts-list">読み込み中...</div>
       </div>
 
       <!-- 設定 -->
@@ -274,11 +276,6 @@
                 <input type="number" id="set-maxChars" value="1000">
               </div>
             </div>
-          </div>
-
-          <div class="card">
-            <h3>スケジュール</h3>
-            <small>投稿時刻はアカウントごとに個別設定されます。「アカウント管理」→「編集」から各アカウントの投稿時刻を設定してください。</small>
           </div>
 
           <div class="card">
