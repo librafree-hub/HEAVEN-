@@ -401,15 +401,22 @@ const App = {
   async miteneRandomSend() {
     const selected = [...document.querySelectorAll('.mitene-select-cb:checked')].map(cb => cb.value);
     if (selected.length === 0) { alert('送信する子を選択してください'); return; }
-    if (!confirm(`${selected.length}人をランダムな間隔で送信します。よろしいですか？`)) return;
 
-    const result = await this.api('/mitene/random-send', 'POST', { accountIds: selected });
+    const from = document.getElementById('mitene-random-from').value;
+    const to = document.getElementById('mitene-random-to').value;
+    if (!from || !to) { alert('時間帯を設定してください'); return; }
+
+    if (!confirm(`${selected.length}人を ${from}〜${to} の間でランダムに送信します。よろしいですか？`)) return;
+
+    const result = await this.api('/mitene/random-send', 'POST', { accountIds: selected, from, to });
     if (result.error) {
       alert('エラー: ' + result.error);
     } else {
-      alert(`${selected.length}人のランダム送信を開始しました。\n順番と間隔はランダムです。`);
+      const times = result.scheduledTimes || [];
+      const list = times.map(t => `  ${t.name}: ${t.time}`).join('\n');
+      document.getElementById('mitene-random-status').textContent = `${selected.length}人のランダム送信を予約しました`;
+      alert(`ランダム送信を予約しました:\n\n${list}\n\nサーバーを起動したままにしてください。`);
     }
-    await this.updateMitenePanel();
   },
 
   // === ミテネアカウント管理 ===

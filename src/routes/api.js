@@ -285,32 +285,63 @@ router.post('/mitene/scheduler/stop', (req, res) => {
   res.json({ success: true, status: miteneScheduler.getStatus() });
 });
 
-// 選択した子をランダム間隔で送信
-router.post('/mitene/random-send', async (req, res) => {
-  const { accountIds } = req.body;
+// 選択した子をランダムな時刻に送信
+router.post('/mitene/random-send', (req, res) => {
+  const { accountIds, from, to } = req.body;
   if (!accountIds || accountIds.length === 0) {
     return res.status(400).json({ error: 'アカウントが選択されていません' });
   }
 
-  res.json({ message: `${accountIds.length}人のランダム送信を開始しました` });
+  // 時間帯をパース
+  const [fromH, fromM] = (from || '10:00').split(':').map(Number);
+  const [toH, toM] = (to || '22:00').split(':').map(Number);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), fromH, fromM);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), toH, toM);
 
-  // シャッフルしてランダム順で送信
-  const shuffled = [...accountIds].sort(() => Math.random() - 0.5);
-  (async () => {
-    for (let i = 0; i < shuffled.length; i++) {
-      if (i > 0) {
-        // 1〜5分のランダム間隔
-        const delay = Math.floor(Math.random() * 4 * 60 + 60) * 1000;
-        const min = Math.floor(delay / 60000);
-        const sec = Math.floor((delay % 60000) / 1000);
-        console.log(`  ⏳ 次の送信まで ${min}分${sec}秒待機...`);
-        await new Promise(r => setTimeout(r, delay));
-      }
-      console.log(`  🎲 ランダム送信 (${i + 1}/${shuffled.length}): ${shuffled[i]}`);
-      await miteneScheduler.runSingle(shuffled[i]).catch(e => console.error('ミテネエラー:', e));
-    }
-    console.log('  ✅ ランダム送信完了');
-  })();
+  // 現在時刻が開始時刻より前なら開始時刻から、過ぎていたら現在時刻から
+  const rangeStart = now > todayStart ? now : todayStart;
+  const rangeEnd = todayEnd;
+
+  if (rangeStart >= rangeEnd) {
+    return res.status(400).json({ error: '指定した時間帯が既に過ぎています' });
+  }
+
+  // アカウント情報を取得
+  const accounts = loadMiteneAccounts();
+  const rangeMs = rangeEnd.getTime() - rangeStart.getTime();
+
+  // 各アカウントにランダムな時刻を割り当て
+  const scheduled = accountIds.map(id => {
+    const acc = accounts.find(a => a.id === id);
+    const randomMs = Math.floor(Math.random() * rangeMs);
+    const sendTime = new Date(rangeStart.getTime() + randomMs);
+    return { id, name: acc ? acc.name : id, sendTime };
+  });
+
+  // 時刻順にソート
+  scheduled.sort((a, b) => a.sendTime - b.sendTime);
+
+  const scheduledTimes = scheduled.map(s => ({
+    name: s.name,
+    time: s.sendTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  }));
+
+  console.log('🎲 ランダム送信予約:');
+  scheduled.forEach(s => {
+    console.log(`  ${s.name}: ${s.sendTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`);
+  });
+
+  res.json({ message: 'ランダム送信を予約しました', scheduledTimes });
+
+  // 各時刻にsetTimeoutで予約
+  scheduled.forEach(s => {
+    const delay = s.sendTime.getTime() - Date.now();
+    setTimeout(async () => {
+      console.log(`🎲 ランダム送信開始: ${s.name}`);
+      await miteneScheduler.runSingle(s.id).catch(e => console.error('ミテネエラー:', e));
+    }, Math.max(delay, 0));
+  });
 });
 
 // 単一アカウントミテネ送信（パラメータルートは最後）
