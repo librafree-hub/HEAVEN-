@@ -143,93 +143,55 @@ class MiteneSender {
     return remaining;
   }
 
-  // ステップ3: ランダムにタブを選んでからキテネボタンをクリック
-  async _sendToMembers(page, maxSends, minWeeks) {
-    console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
-
-    // URLからgidを取得
-    const currentUrl = page.url();
-    const gidMatch = currentUrl.match(/gid=(\d+)/);
-    const gid = gidMatch ? gidMatch[1] : null;
-    console.log(`  📍 現在のURL: ${currentUrl} (gid=${gid})`);
-
-    // ランダムにタブを選んでURL直接遷移（みたよ / マイガール / マッチ率）
-    const tabOptions = [
-      { name: 'みたよ', path: 'J10ComeonVisitorList.php' },
-      { name: 'マイガール', path: 'J10ComeonMyGirlList.php' },
-      { name: 'マッチ率', path: 'J10ComeonAiMatchingList.php' }
-    ];
-    const pick = tabOptions[Math.floor(Math.random() * tabOptions.length)];
-
-    if (gid) {
-      const tabUrl = `https://spgirl.cityheaven.net/${pick.path}?gid=${gid}`;
-      console.log(`  🎲 タブ「${pick.name}」をランダム選択 → ${tabUrl}`);
-      try {
-        await page.goto(tabUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-      } catch (navErr) {
-        // networkidle2タイムアウトでもページは読み込まれている場合がある
-        console.log(`  ⚠️ ページ読み込みタイムアウト、続行を試みます...`);
-        await this._wait(3000);
-      }
-      // ページ完全読み込みを待つ（マッチ率/マイガールはロードが遅い）
-      await this._wait(4000);
-      // キテネボタンが表示されるまで最大15秒待機
-      try {
-        await page.waitForSelector('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]', { timeout: 15000 });
-        console.log(`  ✅ ボタン検出OK`);
-      } catch (e) {
-        console.log(`  ⚠️ ボタン検出タイムアウト。ページリロードして再試行...`);
-        try {
-          await page.reload({ waitUntil: 'networkidle2', timeout: 60000 });
-        } catch (reloadErr) {
-          console.log(`  ⚠️ リロードタイムアウト、続行を試みます...`);
-        }
-        await this._wait(5000);
-      }
-    } else {
-      console.log(`  ⚠️ gid取得できず。現在のページのまま続行。`);
-    }
-
-    // 会員リストのURLを保存（送信後に戻るため）
-    const memberListUrl = page.url();
-
-    // 残り回数を確認（ページが完全に読み込まれるのを待つ）
-    let countInfo = null;
-    for (let retry = 0; retry < 3; retry++) {
-      countInfo = await this._getRemainingCount(page);
-      if (countInfo) break;
-      console.log(`  ⏳ 残り回数読み取り待機中... (${retry + 1}/3)`);
+  // タブに遷移してボタンが表示されるまで待つ
+  async _navigateToTab(page, tabUrl, tabName) {
+    console.log(`  🔄 タブ「${tabName}」に遷移 → ${tabUrl}`);
+    try {
+      await page.goto(tabUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+    } catch (navErr) {
+      console.log(`  ⚠️ ページ読み込みタイムアウト、続行を試みます...`);
       await this._wait(3000);
     }
-    if (countInfo) {
-      console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total}`);
-      if (countInfo.remaining === 0) {
-        console.log(`  ⚠️ 残り回数が0です。送信できません。`);
-        return { success: false, count: 0, error: '残り回数が0です' };
+    await this._wait(4000);
+    try {
+      await page.waitForSelector('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]', { timeout: 15000 });
+      console.log(`  ✅ ボタン検出OK（${tabName}）`);
+      return true;
+    } catch (e) {
+      console.log(`  ⚠️ ボタン検出タイムアウト（${tabName}）。リロード再試行...`);
+      try {
+        await page.reload({ waitUntil: 'networkidle2', timeout: 60000 });
+      } catch (reloadErr) {
+        console.log(`  ⚠️ リロードタイムアウト、続行を試みます...`);
       }
-      if (countInfo.remaining < maxSends) {
-        maxSends = countInfo.remaining;
-        console.log(`  📊 残り回数に合わせて最大${maxSends}件に調整`);
+      await this._wait(5000);
+      // リロード後もう一度チェック
+      const btns = await page.$$('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]');
+      if (btns.length > 0) {
+        console.log(`  ✅ リロード後ボタン検出OK（${tabName}）`);
+        return true;
       }
+      console.log(`  ❌ タブ「${tabName}」にボタンなし`);
+      return false;
     }
+  }
 
-    let sentCount = 0;
+  // 1つのタブ内で送信ループを実行
+  async _sendOnCurrentTab(page, memberListUrl, maxSends, sentCount, minWeeks, triedUids) {
     let errorCount = 0;
     let skipCount = 0;
-    const triedUids = new Set();
+    let tabExhausted = false; // このタブの全員がスキップ/処理済み
 
-    // 送信ループ: ページから毎回ボタンを探して1つクリック → 戻る → 繰り返し
     for (let attempt = 0; attempt < maxSends * 3 && sentCount < maxSends; attempt++) {
       try {
-        // ページ上のキテネ送信ボタンを取得（Puppeteer ElementHandle）
         const buttons = await page.$$('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]');
 
         if (buttons.length === 0) {
-          console.log(`  📋 送信ボタンなし。完了。`);
+          console.log(`  📋 送信ボタンなし。`);
+          tabExhausted = true;
           break;
         }
 
-        // まだ試してないボタンを探す（送付済み日付もチェック）
         let clickedButton = null;
         let clickedUid = null;
         let allChecked = true;
@@ -241,8 +203,6 @@ class MiteneSender {
 
             const uid = uidMatch[1];
 
-            // ボタンの周辺要素から送信済み日付を探す
-            // フォーマット例: 「2026/02/11 送信済」「今日」「昨日」「X日前」「X時間前」
             let parentEl = el.parentElement;
             for (let i = 0; i < 8 && parentEl; i++) {
               const text = parentEl.textContent || '';
@@ -252,13 +212,11 @@ class MiteneSender {
               let sentDate = null;
               let sentLabel = '';
 
-              // パターン1: 「2026/02/11 送信済」（年月日フル）
               const m1 = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s*送信済/);
               if (m1) {
                 sentDate = new Date(parseInt(m1[1]), parseInt(m1[2]) - 1, parseInt(m1[3]));
                 sentLabel = `${m1[1]}/${m1[2]}/${m1[3]}`;
               }
-              // パターン2: 「02/11 送信済」「2/11 送信済」（年なし月日）
               if (!sentDate) {
                 const m2 = text.match(/(\d{1,2})[\/](\d{1,2})\s*送信済/);
                 if (m2) {
@@ -268,7 +226,6 @@ class MiteneSender {
                   sentLabel = `${m2[1]}/${m2[2]}`;
                 }
               }
-              // パターン3: 「X月X日 送信済」
               if (!sentDate) {
                 const m3 = text.match(/(\d{1,2})月(\d{1,2})日\s*送信済/);
                 if (m3) {
@@ -278,17 +235,14 @@ class MiteneSender {
                   sentLabel = `${m3[1]}月${m3[2]}日`;
                 }
               }
-              // パターン4: 「今日 送信済」「本日 送信済」
               if (!sentDate && text.match(/(今日|本日)\s*送信済/)) {
                 sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 sentLabel = '今日';
               }
-              // パターン5: 「昨日 送信済」
               if (!sentDate && text.match(/昨日\s*送信済/)) {
                 sentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
                 sentLabel = '昨日';
               }
-              // パターン6: 「X日前 送信済」
               if (!sentDate) {
                 const m6 = text.match(/(\d+)日前\s*送信済/);
                 if (m6) {
@@ -296,7 +250,6 @@ class MiteneSender {
                   sentLabel = `${m6[1]}日前`;
                 }
               }
-              // パターン7: 「X時間前 送信済」（今日扱い）
               if (!sentDate) {
                 const m7 = text.match(/(\d+)時間前\s*送信済/);
                 if (m7) {
@@ -339,31 +292,25 @@ class MiteneSender {
         }
 
         if (!clickedButton) {
-          if (allChecked) {
-            console.log(`  📋 全ボタン処理済み。完了。`);
-          } else {
-            console.log(`  📋 送信可能なボタンなし。完了。`);
-          }
+          tabExhausted = true;
+          console.log(`  📋 このタブで送信可能な人なし。`);
           break;
         }
 
         triedUids.add(clickedUid);
         console.log(`  🖱️ ボタンクリック uid=${clickedUid} (${sentCount + 1}/${maxSends})`);
 
-        // ダイアログ追跡（エラー検知用）
         let lastDialogMessage = '';
         const dialogTracker = (dialog) => {
           lastDialogMessage = dialog.message();
         };
         page.on('dialog', dialogTracker);
 
-        // Puppeteerのネイティブクリック（実際のマウスイベント）
         try {
           await clickedButton.click();
         } catch (clickErr) {
           console.log(`  ⚠️ クリック失敗（要素が消えた？）: ${clickErr.message}`);
           page.off('dialog', dialogTracker);
-          // ページをリロードして再試行
           try {
             await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
           } catch (e2) { /* タイムアウトでも続行 */ }
@@ -374,7 +321,6 @@ class MiteneSender {
 
         page.off('dialog', dialogTracker);
 
-        // エラー判定
         if (lastDialogMessage.includes('エラー')) {
           errorCount++;
           console.log(`  ❌ 送信失敗: ${lastDialogMessage}`);
@@ -385,7 +331,6 @@ class MiteneSender {
           continue;
         }
 
-        // ページ遷移が発生した場合、会員リストに戻る
         const afterUrl = page.url();
         if (afterUrl !== memberListUrl) {
           console.log(`  📍 遷移検知: ${afterUrl}`);
@@ -401,7 +346,6 @@ class MiteneSender {
         sentCount++;
         console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
 
-        // 残り回数を確認
         const afterCount = await this._getRemainingCount(page);
         if (afterCount) {
           console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total}`);
@@ -423,19 +367,115 @@ class MiteneSender {
       }
     }
 
-    if (skipCount > 0) {
-      console.log(`  📊 スキップ合計: ${skipCount}人（${minWeeks}週間以内に送付済み）`);
+    return { sentCount, errorCount, skipCount, tabExhausted };
+  }
+
+  // ステップ3: 全タブを順番に確認してキテネ送信
+  async _sendToMembers(page, maxSends, minWeeks) {
+    console.log(`  👋 会員リストからミテネ送信中（最大${maxSends}件）...`);
+
+    // URLからgidを取得
+    const currentUrl = page.url();
+    const gidMatch = currentUrl.match(/gid=(\d+)/);
+    const gid = gidMatch ? gidMatch[1] : null;
+    console.log(`  📍 現在のURL: ${currentUrl} (gid=${gid})`);
+
+    if (!gid) {
+      console.log(`  ⚠️ gid取得できず。現在のページのまま続行。`);
     }
 
+    // タブ一覧をランダムな順序でシャッフル
+    const tabOptions = [
+      { name: 'みたよ', path: 'J10ComeonVisitorList.php' },
+      { name: 'マイガール', path: 'J10ComeonMyGirlList.php' },
+      { name: 'マッチ率', path: 'J10ComeonAiMatchingList.php' }
+    ];
+    // Fisher-Yates シャッフル
+    for (let i = tabOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tabOptions[i], tabOptions[j]] = [tabOptions[j], tabOptions[i]];
+    }
+    console.log(`  🎲 タブ順序: ${tabOptions.map(t => t.name).join(' → ')}`);
+
+    // 最初のタブに遷移
+    if (gid) {
+      const firstTabUrl = `https://spgirl.cityheaven.net/${tabOptions[0].path}?gid=${gid}`;
+      await this._navigateToTab(page, firstTabUrl, tabOptions[0].name);
+    }
+
+    // 残り回数を確認
+    let countInfo = null;
+    for (let retry = 0; retry < 3; retry++) {
+      countInfo = await this._getRemainingCount(page);
+      if (countInfo) break;
+      console.log(`  ⏳ 残り回数読み取り待機中... (${retry + 1}/3)`);
+      await this._wait(3000);
+    }
+    if (countInfo) {
+      console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total}`);
+      if (countInfo.remaining === 0) {
+        console.log(`  ⚠️ 残り回数が0です。送信できません。`);
+        return { success: false, count: 0, error: '残り回数が0です' };
+      }
+      if (countInfo.remaining < maxSends) {
+        maxSends = countInfo.remaining;
+        console.log(`  📊 残り回数に合わせて最大${maxSends}件に調整`);
+      }
+    }
+
+    let totalSent = 0;
+    let totalErrors = 0;
+    let totalSkipped = 0;
+    const triedUids = new Set();
+
+    // 各タブを順番に試す
+    for (let tabIdx = 0; tabIdx < tabOptions.length && totalSent < maxSends; tabIdx++) {
+      const tab = tabOptions[tabIdx];
+
+      // 2番目以降のタブは遷移が必要
+      if (tabIdx > 0 && gid) {
+        const tabUrl = `https://spgirl.cityheaven.net/${tab.path}?gid=${gid}`;
+        const hasButtons = await this._navigateToTab(page, tabUrl, tab.name);
+        if (!hasButtons) {
+          console.log(`  ⏭️ タブ「${tab.name}」スキップ（ボタンなし）`);
+          continue;
+        }
+      }
+
+      const memberListUrl = page.url();
+      console.log(`  📂 タブ「${tab.name}」で送信開始...`);
+
+      const result = await this._sendOnCurrentTab(
+        page, memberListUrl, maxSends, totalSent, minWeeks, triedUids
+      );
+
+      totalSent = result.sentCount;
+      totalErrors += result.errorCount;
+      totalSkipped += result.skipCount;
+
+      if (totalSent >= maxSends) {
+        console.log(`  🏁 最大送信数到達（${totalSent}/${maxSends}）`);
+        break;
+      }
+
+      if (result.tabExhausted && tabIdx < tabOptions.length - 1) {
+        console.log(`  ➡️ 次のタブへ移動...`);
+      }
+    }
+
+    if (totalSkipped > 0) {
+      console.log(`  📊 スキップ合計: ${totalSkipped}人（${minWeeks}週間以内に送付済み）`);
+    }
+    console.log(`  📊 全タブ確認完了: 送信${totalSent}件 / スキップ${totalSkipped}人 / エラー${totalErrors}件`);
+
     await this._screenshot(page, 'mitene-after-send');
-    // スキップのみで送信0件の場合も成功扱い（全員が最近送信済み）
-    const allSkipped = sentCount === 0 && skipCount > 0 && errorCount === 0;
+    const allSkipped = totalSent === 0 && totalSkipped > 0 && totalErrors === 0;
     return {
-      success: sentCount > 0 || allSkipped,
-      count: sentCount,
-      errors: errorCount,
-      skipped: skipCount,
-      message: allSkipped ? `全員${minWeeks}週間以内に送信済みのためスキップ（${skipCount}人）` : undefined
+      success: totalSent > 0 || allSkipped,
+      count: totalSent,
+      errors: totalErrors,
+      skipped: totalSkipped,
+      message: allSkipped ? `全タブ確認済み・全員${minWeeks}週間以内に送信済みのためスキップ（${totalSkipped}人）` : undefined
     };
   }
 
