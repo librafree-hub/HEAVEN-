@@ -26,7 +26,6 @@ const App = {
 
         if (page === 'diary') this.loadDiary();
         if (page === 'mitene') this.loadMitene();
-        if (page === 'accounts') this.loadAccounts();
         if (page === 'settings') this.loadSettings();
       });
     });
@@ -51,7 +50,7 @@ const App = {
     const el = document.getElementById('diary-accounts-list');
 
     if (accounts.length === 0) {
-      el.innerHTML = '<div class="loading">アカウントがありません。「アカウント管理」から追加してください。</div>';
+      el.innerHTML = '<div class="loading">アカウントがありません。「+ 追加」から女の子を追加してください。</div>';
     } else {
       el.innerHTML = accounts.map(a => `
         <div class="mitene-account-row">
@@ -63,6 +62,9 @@ const App = {
           </span>
           <span class="mitene-account-status" id="diary-acc-status-${a.id}"></span>
           <button class="btn btn-sm btn-primary" id="diary-btn-${a.id}" onclick="App.postSingle('${a.id}')">投稿</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
+          <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
         </div>
       `).join('');
     }
@@ -449,37 +451,6 @@ const App = {
   // =============================================
   // === 写メ日記 アカウント管理 ===
   // =============================================
-  async loadAccounts() {
-    const accounts = await this.api('/accounts');
-    const el = document.getElementById('accounts-list');
-
-    if (accounts.length === 0) {
-      el.innerHTML = '<div class="loading">アカウントがありません。「+ アカウント追加」から追加してください。</div>';
-      return;
-    }
-
-    el.innerHTML = accounts.map(a => `
-      <div class="account-card">
-        <div class="account-card-header">
-          <h4>${this.esc(a.name)}</h4>
-          <span class="badge ${a.active ? 'badge-active' : 'badge-inactive'}">${a.active ? '有効' : '無効'}</span>
-        </div>
-        <div class="account-meta">
-          ${this.esc(a.personality || '')}<br>
-          画像: ${a.imageStats.total}枚（残り${a.imageStats.remaining}枚）<br>
-          投稿数/日: ${a.postsPerDay}<br>
-          ${{diary:'写メ日記',freepost:'フリーポスト',random:'ランダム'}[a.postType] || '写メ日記'} / ${{public:'全公開',mygirl:'マイガール',random:'ランダム'}[a.visibility] || '全公開'}
-        </div>
-        <div class="account-actions">
-          <button class="btn btn-sm btn-primary" onclick="App.postSingle('${a.id}')">投稿</button>
-          <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
-          <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
-          <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
-        </div>
-      </div>
-    `).join('');
-  },
-
   showAddAccount() {
     document.getElementById('modal-account-title').textContent = 'アカウント追加';
     document.getElementById('acc-id').value = '';
@@ -536,13 +507,13 @@ const App = {
     }
 
     this.closeModal('modal-account');
-    this.loadAccounts();
+    this.loadDiary();
   },
 
   async deleteAccount(id, name) {
     if (!confirm(`「${name}」を削除しますか？`)) return;
     await this.api(`/accounts/${id}`, 'DELETE');
-    this.loadAccounts();
+    this.loadDiary();
   },
 
   // === 画像管理 ===

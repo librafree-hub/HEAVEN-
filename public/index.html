@@ -19,7 +19,6 @@
         <li><a href="#" data-page="diary" class="active">写メ日記</a></li>
         <li><a href="#" data-page="mitene">ミテネ</a></li>
         <li class="nav-section">管理</li>
-        <li><a href="#" data-page="accounts">アカウント管理</a></li>
         <li><a href="#" data-page="settings">設定</a></li>
       </ul>
     </nav>
@@ -67,9 +66,12 @@
           <span id="diary-scheduler-status" class="status-badge">停止中</span>
         </div>
 
-        <!-- アカウント別操作 -->
+        <!-- アカウント管理（写メ日記専用） -->
         <div class="card">
-          <h3>アカウント別 投稿</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin-bottom:0;">写メ日記 アカウント</h3>
+            <button class="btn btn-sm btn-primary" onclick="App.showAddAccount()">+ 追加</button>
+          </div>
           <div id="diary-accounts-list">読み込み中...</div>
         </div>
 
@@ -77,6 +79,110 @@
         <div class="card">
           <h3>投稿履歴</h3>
           <div id="diary-history">読み込み中...</div>
+        </div>
+
+        <!-- アカウント編集モーダル -->
+        <div id="modal-account" class="modal" style="display:none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3 id="modal-account-title">アカウント編集</h3>
+              <button class="btn-close" onclick="App.closeModal('modal-account')">&times;</button>
+            </div>
+            <form id="form-account" onsubmit="App.saveAccount(event)">
+              <input type="hidden" id="acc-id">
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>名前</label>
+                  <input type="text" id="acc-name" required placeholder="りな">
+                </div>
+                <div class="form-group">
+                  <label>1日の投稿数</label>
+                  <input type="number" id="acc-postsPerDay" value="3" min="1" max="10">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>性格</label>
+                <input type="text" id="acc-personality" placeholder="明るくお茶目、アクティブなライフスタイル">
+              </div>
+              <div class="form-group">
+                <label>口調</label>
+                <input type="text" id="acc-tone" placeholder="フレンドリーで絵文字多め♪">
+              </div>
+              <div class="form-group">
+                <label>趣味・興味（カンマ区切り）</label>
+                <input type="text" id="acc-interests" placeholder="カフェ, ショッピング, 美容">
+              </div>
+              <div class="form-group">
+                <label>文体</label>
+                <input type="text" id="acc-writingStyle" placeholder="短文でテンポよく、明るい印象">
+              </div>
+
+              <hr>
+              <h4>シティヘブン ログイン情報</h4>
+
+              <div class="form-group">
+                <label>ログインURL</label>
+                <input type="text" id="acc-loginUrl" placeholder="https://d-heaven.net/">
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>ログインID</label>
+                  <input type="text" id="acc-loginId">
+                </div>
+                <div class="form-group">
+                  <label>パスワード</label>
+                  <input type="password" id="acc-loginPassword">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>日記投稿URL</label>
+                <input type="text" id="acc-diaryUrl" placeholder="https://spgirl.cityheaven.net/J4KeitaiDiaryPost.php?gid=...">
+              </div>
+              <hr>
+              <h4>投稿オプション</h4>
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>投稿方法</label>
+                  <select id="acc-postType">
+                    <option value="diary">写メ日記</option>
+                    <option value="freepost">フリーポスト（24時間で消える）</option>
+                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>公開範囲</label>
+                  <select id="acc-visibility">
+                    <option value="public">全公開</option>
+                    <option value="mygirl">マイガール限定</option>
+                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">保存</button>
+                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modal-account')">キャンセル</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- 画像管理モーダル -->
+        <div id="modal-images" class="modal" style="display:none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3 id="modal-images-title">画像管理</h3>
+              <button class="btn-close" onclick="App.closeModal('modal-images')">&times;</button>
+            </div>
+            <div class="image-upload-area">
+              <input type="file" id="image-upload" multiple accept="image/*" onchange="App.uploadImages(event)">
+              <label for="image-upload" class="upload-label">画像をドラッグ＆ドロップ または クリックして選択</label>
+            </div>
+            <div id="image-list" class="image-grid"></div>
+          </div>
         </div>
       </div>
 
@@ -200,119 +306,6 @@
               <button type="button" class="btn btn-secondary" onclick="App.closeModal('modal-mitene-account')">キャンセル</button>
             </div>
           </form>
-        </div>
-      </div>
-
-      <!-- ===== アカウント管理ページ ===== -->
-      <div id="page-accounts" class="page">
-        <h2>アカウント管理</h2>
-
-        <button class="btn btn-primary" onclick="App.showAddAccount()">+ アカウント追加</button>
-
-        <div id="accounts-list" class="accounts-grid">読み込み中...</div>
-
-        <!-- アカウント編集モーダル -->
-        <div id="modal-account" class="modal" style="display:none;">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h3 id="modal-account-title">アカウント編集</h3>
-              <button class="btn-close" onclick="App.closeModal('modal-account')">&times;</button>
-            </div>
-            <form id="form-account" onsubmit="App.saveAccount(event)">
-              <input type="hidden" id="acc-id">
-
-              <div class="form-grid">
-                <div class="form-group">
-                  <label>名前</label>
-                  <input type="text" id="acc-name" required placeholder="りな">
-                </div>
-                <div class="form-group">
-                  <label>1日の投稿数</label>
-                  <input type="number" id="acc-postsPerDay" value="3" min="1" max="10">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label>性格</label>
-                <input type="text" id="acc-personality" placeholder="明るくお茶目、アクティブなライフスタイル">
-              </div>
-              <div class="form-group">
-                <label>口調</label>
-                <input type="text" id="acc-tone" placeholder="フレンドリーで絵文字多め♪">
-              </div>
-              <div class="form-group">
-                <label>趣味・興味（カンマ区切り）</label>
-                <input type="text" id="acc-interests" placeholder="カフェ, ショッピング, 美容">
-              </div>
-              <div class="form-group">
-                <label>文体</label>
-                <input type="text" id="acc-writingStyle" placeholder="短文でテンポよく、明るい印象">
-              </div>
-
-              <hr>
-              <h4>シティヘブン ログイン情報</h4>
-
-              <div class="form-group">
-                <label>ログインURL</label>
-                <input type="text" id="acc-loginUrl" placeholder="https://d-heaven.net/">
-              </div>
-              <div class="form-grid">
-                <div class="form-group">
-                  <label>ログインID</label>
-                  <input type="text" id="acc-loginId">
-                </div>
-                <div class="form-group">
-                  <label>パスワード</label>
-                  <input type="password" id="acc-loginPassword">
-                </div>
-              </div>
-              <div class="form-group">
-                <label>日記投稿URL</label>
-                <input type="text" id="acc-diaryUrl" placeholder="https://spgirl.cityheaven.net/J4KeitaiDiaryPost.php?gid=...">
-              </div>
-              <hr>
-              <h4>投稿オプション</h4>
-
-              <div class="form-grid">
-                <div class="form-group">
-                  <label>投稿方法</label>
-                  <select id="acc-postType">
-                    <option value="diary">写メ日記</option>
-                    <option value="freepost">フリーポスト（24時間で消える）</option>
-                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>公開範囲</label>
-                  <select id="acc-visibility">
-                    <option value="public">全公開</option>
-                    <option value="mygirl">マイガール限定</option>
-                    <option value="random">ランダム（毎回どちらかを自動選択）</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary">保存</button>
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modal-account')">キャンセル</button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <!-- 画像管理モーダル -->
-        <div id="modal-images" class="modal" style="display:none;">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h3 id="modal-images-title">画像管理</h3>
-              <button class="btn-close" onclick="App.closeModal('modal-images')">&times;</button>
-            </div>
-            <div class="image-upload-area">
-              <input type="file" id="image-upload" multiple accept="image/*" onchange="App.uploadImages(event)">
-              <label for="image-upload" class="upload-label">画像をドラッグ＆ドロップ または クリックして選択</label>
-            </div>
-            <div id="image-list" class="image-grid"></div>
-          </div>
         </div>
       </div>
 
