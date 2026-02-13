@@ -607,6 +607,7 @@ const App = {
     const settings = await this.api('/settings');
     document.getElementById('set-geminiApiKey').value = '';
     document.getElementById('set-geminiApiKey').placeholder = settings.geminiApiKey ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力';
+    document.getElementById('set-geminiModel').value = settings.geminiModel || 'gemini-2.0-flash';
     document.getElementById('set-minChars').value = settings.minChars || 450;
     document.getElementById('set-maxChars').value = settings.maxChars || 1000;
     document.getElementById('set-schedule').value = settings.schedule || '0 */3 8-23 * * *';
@@ -632,6 +633,7 @@ const App = {
     // APIキーが入力されてる場合のみ保存
     const apiKey = document.getElementById('set-geminiApiKey').value.trim();
     if (apiKey) data.geminiApiKey = apiKey;
+    data.geminiModel = document.getElementById('set-geminiModel').value;
     await this.api('/settings', 'PUT', data);
     alert('設定を保存しました');
   },

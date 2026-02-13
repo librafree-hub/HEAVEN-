@@ -8,25 +8,28 @@ class AIGenerator {
   }
 
   _getModel() {
-    if (!this.model) {
-      // settings.json → .env の順で探す
-      const settings = this._loadSettings();
-      const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-        throw new Error('GEMINI_API_KEYが設定されていません。設定ページでAPIキーを入力してください。');
-      }
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-      this.model = genAI.getGenerativeModel({
-        model: modelName,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ]
-      });
+    // 毎回settings.jsonから読み直す（モデル変更に対応）
+    const settings = this._loadSettings();
+    const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+      throw new Error('GEMINI_API_KEYが設定されていません。設定ページでAPIキーを入力してください。');
     }
+    const modelName = settings.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+
+    // モデル名が変わったらキャッシュリセット
+    if (this.model && this._currentModel === modelName) return this.model;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    this.model = genAI.getGenerativeModel({
+      model: modelName,
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ]
+    });
+    this._currentModel = modelName;
     return this.model;
   }
 
@@ -94,8 +97,22 @@ ${samples.length > 0 ? '- サンプル日記の文体を最優先で真似るこ
 
 タイトルと本文だけを出力してください。余計な説明は不要です。`;
 
-    // テキストのみでGeminiに生成依頼（画像はCityHeaven投稿時にアップロード）
-    const result = await model.generateContent(prompt);
+    // テキストのみでGeminiに生成依頼（429なら最大2回リトライ）
+    let result;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        result = await model.generateContent(prompt);
+        break;
+      } catch (e) {
+        if (e.message && e.message.includes('429') && attempt < 2) {
+          const wait = (attempt + 1) * 30;
+          console.log(`  ⏳ レート制限 - ${wait}秒待機して再試行... (${attempt + 1}/2)`);
+          await new Promise(r => setTimeout(r, wait * 1000));
+          continue;
+        }
+        throw e;
+      }
+    }
     const text = result.response.text().trim();
 
     // タイトルと本文を分離
