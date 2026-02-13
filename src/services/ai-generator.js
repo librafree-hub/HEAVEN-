@@ -28,6 +28,26 @@ class AIGenerator {
     return this.model;
   }
 
+  // サンプル日記を取得（保存済みファイル or アカウント内テキスト）
+  _getSampleDiaries(account) {
+    // 1. アカウントに直接テキストがある場合
+    if (account.sampleDiaries && account.sampleDiaries.trim()) {
+      const samples = account.sampleDiaries.split(/\n\s*\n/).filter(s => s.trim().length > 20);
+      if (samples.length > 0) return samples;
+    }
+
+    // 2. スクレイプ済みファイルがある場合
+    try {
+      const diaryScraper = require('./diary-scraper');
+      const entries = diaryScraper.loadSamples(account.id);
+      if (entries.length > 0) {
+        return entries.map(e => `【${e.title}】\n${e.body}`);
+      }
+    } catch (e) { /* 無視 */ }
+
+    return [];
+  }
+
   // 日記テキストを生成
   async generateDiary(account, imagePath) {
     const model = this._getModel();
@@ -36,16 +56,26 @@ class AIGenerator {
     const minChars = settings.minChars || 450;
     const maxChars = settings.maxChars || 1000;
 
+    // サンプル日記があればプロンプトに含める
+    const samples = this._getSampleDiaries(account);
+    let sampleSection = '';
+    if (samples.length > 0) {
+      // 最大5件をランダムに選択
+      const shuffled = [...samples].sort(() => Math.random() - 0.5);
+      const picked = shuffled.slice(0, 5);
+      sampleSection = `\n【過去の日記サンプル（この文体・口調・雰囲気を真似てください）】\n${picked.map((s, i) => `--- サンプル${i + 1} ---\n${s}`).join('\n\n')}\n\n★重要: 上記サンプルの文体、口調、絵文字の使い方、改行の入れ方、言い回しを忠実に真似てください。サンプルの内容をそのままコピーせず、同じ雰囲気で新しい内容を書いてください。\n`;
+    }
+
     const prompt = `あなたは風俗店で働く「${account.name}」というキャストです。
 以下のキャラクター設定に基づいて、シティヘブンの写メ日記を書いてください。
 
 【キャラクター設定】
 - 名前: ${account.name}
-- 性格: ${account.personality}
-- 口調: ${account.tone}
-- 趣味・興味: ${(account.interests || []).join('、')}
-- 文体: ${account.writingStyle}
-
+- 性格: ${account.personality || '設定なし'}
+- 口調: ${account.tone || '設定なし'}
+- 趣味・興味: ${(account.interests || []).join('、') || '設定なし'}
+- 文体: ${account.writingStyle || '設定なし'}
+${sampleSection}
 【ルール】
 - ${minChars}〜${maxChars}文字で書く
 - 自然な日記風の文章にする
@@ -54,7 +84,7 @@ class AIGenerator {
 - 写真も一緒に投稿するので、写真を撮ったことや自撮りに軽く触れる内容を自然に含める
 - 宣伝っぽくならないようにする
 - 日常の出来事や気持ちを中心に書く
-
+${samples.length > 0 ? '- サンプル日記の文体を最優先で真似ること\n' : ''}
 【出力形式】
 1行目: タイトル（20文字以内）
 2行目: 空行

@@ -455,7 +455,35 @@ const App = {
     document.getElementById('modal-account-title').textContent = 'アカウント追加';
     document.getElementById('acc-id').value = '';
     document.getElementById('form-account').reset();
+    document.getElementById('acc-sample-count').textContent = '';
     document.getElementById('modal-account').style.display = 'flex';
+  },
+
+  async fetchDiarySamples() {
+    const url = document.getElementById('acc-diaryPageUrl').value.trim();
+    if (!url) { alert('公開日記ページURLを入力してください'); return; }
+
+    const accountId = document.getElementById('acc-id').value || '_temp';
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '取得中...';
+
+    try {
+      const result = await this.api(`/accounts/${accountId}/scrape-diary`, 'POST', { diaryPageUrl: url });
+      if (result.error) {
+        alert(`取得失敗: ${result.error}`);
+      } else {
+        // サンプルをテキストエリアに表示
+        const text = result.entries.map(e => `【${e.title}】\n${e.body}`).join('\n\n');
+        document.getElementById('acc-sampleDiaries').value = text;
+        document.getElementById('acc-sample-count').textContent = `${result.entries.length}件の日記を取得しました`;
+      }
+    } catch (err) {
+      alert('取得エラー: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '取得';
+    }
   },
 
   async editAccount(id) {
@@ -476,8 +504,14 @@ const App = {
     document.getElementById('acc-loginPassword').value = '';
     document.getElementById('acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み（変更する場合のみ入力）' : 'パスワードを入力';
     document.getElementById('acc-diaryUrl').value = a.diaryUrl || '';
+    document.getElementById('acc-diaryPageUrl').value = a.diaryPageUrl || '';
+    document.getElementById('acc-sampleDiaries').value = a.sampleDiaries || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
+    // サンプル数表示
+    const sampleText = a.sampleDiaries || '';
+    const sampleCount = sampleText ? sampleText.split(/\n\s*\n/).filter(s => s.trim().length > 20).length : 0;
+    document.getElementById('acc-sample-count').textContent = sampleCount > 0 ? `${sampleCount}件のサンプル日記あり` : '';
     document.getElementById('modal-account').style.display = 'flex';
   },
 
@@ -495,6 +529,8 @@ const App = {
       loginId: document.getElementById('acc-loginId').value,
       loginPassword: document.getElementById('acc-loginPassword').value || '***',
       diaryUrl: document.getElementById('acc-diaryUrl').value,
+      diaryPageUrl: document.getElementById('acc-diaryPageUrl').value,
+      sampleDiaries: document.getElementById('acc-sampleDiaries').value,
       postType: document.getElementById('acc-postType').value,
       visibility: document.getElementById('acc-visibility').value,
       active: true

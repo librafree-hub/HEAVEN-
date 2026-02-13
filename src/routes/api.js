@@ -6,6 +6,7 @@ const database = require('../services/database');
 const imageManager = require('../services/image-manager');
 const scheduler = require('../services/scheduler');
 const miteneScheduler = require('../services/mitene-scheduler');
+const diaryScraper = require('../services/diary-scraper');
 
 const router = express.Router();
 
@@ -73,6 +74,8 @@ router.post('/accounts', (req, res) => {
     loginId: req.body.loginId || '',
     loginPassword: req.body.loginPassword || '',
     diaryUrl: req.body.diaryUrl || '',
+    diaryPageUrl: req.body.diaryPageUrl || '',
+    sampleDiaries: req.body.sampleDiaries || '',
     postType: req.body.postType || 'diary',
     visibility: req.body.visibility || 'public'
   };
@@ -100,6 +103,20 @@ router.delete('/accounts/:id', (req, res) => {
   accounts = accounts.filter(a => a.id !== req.params.id);
   saveAccounts(accounts);
   res.json({ success: true });
+});
+
+// === 過去日記スクレイプ ===
+
+router.post('/accounts/:accountId/scrape-diary', async (req, res) => {
+  try {
+    const diaryPageUrl = req.body.diaryPageUrl;
+    if (!diaryPageUrl) return res.status(400).json({ error: '日記ページURLが必要です' });
+    const entries = await diaryScraper.scrapeAndSave(req.params.accountId, diaryPageUrl);
+    res.json({ success: true, entries, count: entries.length });
+  } catch (e) {
+    console.error('日記スクレイプエラー:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // === 画像管理 ===
