@@ -428,7 +428,15 @@ class MiteneSender {
     }
 
     await this._screenshot(page, 'mitene-after-send');
-    return { success: sentCount > 0, count: sentCount, errors: errorCount, skipped: skipCount };
+    // スキップのみで送信0件の場合も成功扱い（全員が最近送信済み）
+    const allSkipped = sentCount === 0 && skipCount > 0 && errorCount === 0;
+    return {
+      success: sentCount > 0 || allSkipped,
+      count: sentCount,
+      errors: errorCount,
+      skipped: skipCount,
+      message: allSkipped ? `全員${minWeeks}週間以内に送信済みのためスキップ（${skipCount}人）` : undefined
+    };
   }
 
   // メイン処理

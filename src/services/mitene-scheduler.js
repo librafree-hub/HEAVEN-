@@ -98,7 +98,7 @@ class MiteneScheduler {
         image: '',
         postType: 'mitene',
         status: result.success ? 'success' : 'failed',
-        message: result.success ? `${result.count || 0}件送信` : result.error
+        message: result.message || (result.success ? `${result.count || 0}件送信${result.skipped ? `（スキップ${result.skipped}人）` : ''}` : (result.error || '不明なエラー'))
       });
 
       this.accountStatus[accountId] = {
@@ -107,10 +107,12 @@ class MiteneScheduler {
         lastResult: result
       };
 
-      if (result.success) {
-        console.log(`  ✅ ${account.name}: ミテネ送信成功 (${result.count}件)`);
+      if (result.message) {
+        console.log(`  ℹ️ ${account.name}: ${result.message}`);
+      } else if (result.success) {
+        console.log(`  ✅ ${account.name}: ミテネ送信成功 (${result.count}件${result.skipped ? ` / スキップ${result.skipped}人` : ''})`);
       } else {
-        console.log(`  ❌ ${account.name}: ミテネ送信失敗 - ${result.error}`);
+        console.log(`  ❌ ${account.name}: ミテネ送信失敗 - ${result.error || '不明なエラー'}`);
       }
 
       return result;
