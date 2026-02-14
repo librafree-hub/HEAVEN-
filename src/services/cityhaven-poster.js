@@ -153,13 +153,24 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. 投稿ボタンをクリック
+      // 6. 投稿ボタンをクリック（デコメーラーボタンを除外）
       const submitted = await page.evaluate(() => {
-        const btn = document.querySelector('input[type="submit"], button[type="submit"]');
-        if (btn) { btn.click(); return btn.value || btn.textContent || 'submit'; }
-        const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a'));
-        const postBtn = buttons.find(b => (b.textContent || b.value || '').match(/投稿|送信|確認|登録/));
-        if (postBtn) { postBtn.click(); return postBtn.textContent || postBtn.value; }
+        // submit系ボタンを全て取得
+        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        // デコメーラー系を除外
+        const filtered = allBtns.filter(b => {
+          const text = (b.textContent || b.value || '').trim();
+          return !text.includes('デコメーラー') && !text.includes('decomail');
+        });
+        // 「確認」「投稿」「送信」「登録」を含むボタンを優先
+        const postBtn = filtered.find(b => {
+          const text = (b.textContent || b.value || '').trim();
+          return text.match(/確認|投稿|送信|登録/);
+        });
+        if (postBtn) { postBtn.click(); return (postBtn.value || postBtn.textContent || '').trim(); }
+        // 見つからなければデコメーラー以外の最初のsubmitボタン
+        const submitBtn = filtered.find(b => b.type === 'submit');
+        if (submitBtn) { submitBtn.click(); return (submitBtn.value || submitBtn.textContent || '').trim(); }
         return false;
       });
       if (!submitted) throw new Error('投稿ボタンが見つかりません');
@@ -167,11 +178,15 @@ class CityHavenPoster {
 
       await this._wait(5000);
 
-      // 7. 確認画面がある場合
+      // 7. 確認画面がある場合（デコメーラーボタンを除外）
       const confirmBtn = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-        const c = buttons.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
-        if (c) { c.click(); return c.textContent || c.value; }
+        const filtered = buttons.filter(b => {
+          const text = (b.textContent || b.value || '').trim();
+          return !text.includes('デコメーラー') && !text.includes('decomail');
+        });
+        const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
+        if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
         return false;
       });
       if (confirmBtn) {
