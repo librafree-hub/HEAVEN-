@@ -470,11 +470,11 @@ const App = {
         active: true
       };
 
-      if (id) {
-        await this.api(`/mitene-accounts/${id}`, 'PUT', data);
-      } else {
-        await this.api('/mitene-accounts', 'POST', data);
-      }
+      const result = id
+        ? await this.api(`/mitene-accounts/${id}`, 'PUT', data)
+        : await this.api('/mitene-accounts', 'POST', data);
+
+      if (result.error) { alert(result.error); return; }
 
       this.closeModal('modal-mitene-account');
       this.loadMitene();
@@ -577,11 +577,11 @@ const App = {
       active: true
     };
 
-    if (id) {
-      await this.api(`/accounts/${id}`, 'PUT', data);
-    } else {
-      await this.api('/accounts', 'POST', data);
-    }
+    const result = id
+      ? await this.api(`/accounts/${id}`, 'PUT', data)
+      : await this.api('/accounts', 'POST', data);
+
+    if (result.error) { alert(result.error); return; }
 
     this.closeModal('modal-account');
     this.loadDiary();

@@ -62,6 +62,10 @@ router.get('/accounts', (req, res) => {
 
 router.post('/accounts', (req, res) => {
   const accounts = loadAccounts();
+  const name = (req.body.name || '').trim();
+  if (accounts.some(a => a.name === name)) {
+    return res.status(400).json({ error: `「${name}」は既に登録されています` });
+  }
   const newId = `account_${Date.now()}`;
   const account = {
     id: newId,
@@ -92,6 +96,10 @@ router.put('/accounts/:id', (req, res) => {
   const accounts = loadAccounts();
   const idx = accounts.findIndex(a => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: '見つかりません' });
+  const name = (req.body.name || '').trim();
+  if (accounts.some(a => a.name === name && a.id !== req.params.id)) {
+    return res.status(400).json({ error: `「${name}」は既に登録されています` });
+  }
   if (req.body.loginPassword === '***') {
     req.body.loginPassword = accounts[idx].loginPassword;
   }
@@ -227,6 +235,10 @@ router.get('/mitene-accounts', (req, res) => {
 // ミテネアカウント追加
 router.post('/mitene-accounts', (req, res) => {
   const accounts = loadMiteneAccounts();
+  const name = (req.body.name || '').trim();
+  if (accounts.some(a => a.name === name)) {
+    return res.status(400).json({ error: `「${name}」は既に登録されています` });
+  }
   const newId = `mitene_${Date.now()}`;
   const account = {
     id: newId,
@@ -247,6 +259,10 @@ router.put('/mitene-accounts/:id', (req, res) => {
   const accounts = loadMiteneAccounts();
   const idx = accounts.findIndex(a => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: '見つかりません' });
+  const name = (req.body.name || '').trim();
+  if (accounts.some(a => a.name === name && a.id !== req.params.id)) {
+    return res.status(400).json({ error: `「${name}」は既に登録されています` });
+  }
   if (req.body.loginPassword === '***') {
     req.body.loginPassword = accounts[idx].loginPassword;
   }
