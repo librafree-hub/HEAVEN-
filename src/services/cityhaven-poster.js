@@ -153,50 +153,103 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. 投稿ボタンをクリック（デコメーラーボタンを除外）
+      // 6. ページ上の全ボタンをログ出力（デバッグ用）
+      const allButtons = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a.btn, a[class*="btn"], input[type="image"]'));
+        return btns.map(b => ({
+          tag: b.tagName,
+          type: b.type || '',
+          text: (b.textContent || '').trim().substring(0, 50),
+          value: (b.value || '').trim().substring(0, 50),
+          name: b.name || '',
+          id: b.id || '',
+        }));
+      });
+      console.log(`  🔍 ページ上のボタン一覧 (${allButtons.length}個):`);
+      allButtons.forEach((b, i) => {
+        console.log(`    [${i}] <${b.tag}> type="${b.type}" name="${b.name}" id="${b.id}" value="${b.value}" text="${b.text}"`);
+      });
+
+      // 7. 投稿ボタンをクリック（デコメーラーボタンを除外）
       const submitted = await page.evaluate(() => {
-        // submit系ボタンを全て取得
-        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"]'));
         // デコメーラー系を除外
         const filtered = allBtns.filter(b => {
           const text = (b.textContent || b.value || '').trim();
           return !text.includes('デコメーラー') && !text.includes('decomail');
         });
-        // 「確認」「投稿」「送信」「登録」を含むボタンを優先
-        const postBtn = filtered.find(b => {
+        // 「確認」を含むボタンを最優先（確認画面へ進むため）
+        let target = filtered.find(b => {
           const text = (b.textContent || b.value || '').trim();
-          return text.match(/確認|投稿|送信|登録/);
+          return text.includes('確認');
         });
-        if (postBtn) { postBtn.click(); return (postBtn.value || postBtn.textContent || '').trim(); }
-        // 見つからなければデコメーラー以外の最初のsubmitボタン
-        const submitBtn = filtered.find(b => b.type === 'submit');
-        if (submitBtn) { submitBtn.click(); return (submitBtn.value || submitBtn.textContent || '').trim(); }
+        // なければ「投稿」「送信」「登録」を含むボタン
+        if (!target) {
+          target = filtered.find(b => {
+            const text = (b.textContent || b.value || '').trim();
+            return text.match(/投稿|送信|登録/) && !text.includes('デコメーラー');
+          });
+        }
+        // それでもなければname属性やsubmitタイプで探す
+        if (!target) {
+          target = filtered.find(b => b.name && b.name.match(/submit|post|confirm|diary/i));
+        }
+        if (!target) {
+          target = filtered.find(b => b.type === 'submit');
+        }
+        if (target) {
+          target.click();
+          return { text: (target.value || target.textContent || '').trim(), tag: target.tagName, name: target.name };
+        }
         return false;
       });
       if (!submitted) throw new Error('投稿ボタンが見つかりません');
-      console.log(`  🔘 ボタンクリック: "${submitted}"`);
+      console.log(`  🔘 ボタンクリック: "${submitted.text}" (${submitted.tag} name="${submitted.name}")`);
 
       await this._wait(5000);
+      await this._screenshot(page, 'after-step1');
 
-      // 7. 確認画面がある場合（デコメーラーボタンを除外）
+      // 8. 確認画面 → 最終投稿ボタン（デコメーラー除外）
+      const pageAfterStep1 = await page.evaluate(() => document.body.innerText.substring(0, 500));
+      console.log(`  📄 遷移先ページ内容: "${pageAfterStep1.substring(0, 100)}..."`);
+
       const confirmBtn = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"]'));
         const filtered = buttons.filter(b => {
           const text = (b.textContent || b.value || '').trim();
           return !text.includes('デコメーラー') && !text.includes('decomail');
         });
+        // 「投稿」「送信」「確定」「登録」「OK」を含むボタン
         const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
         if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
         return false;
       });
       if (confirmBtn) {
-        console.log(`  🔘 確認ボタンクリック: "${confirmBtn}"`);
+        console.log(`  🔘 確認→投稿ボタンクリック: "${confirmBtn}"`);
         await this._wait(5000);
+      } else {
+        console.log(`  ℹ️ 確認画面の投稿ボタンなし（1ステップ投稿の可能性）`);
       }
 
       await this._screenshot(page, 'after-post');
-      console.log(`  ✅ 投稿完了`);
-      return { success: true };
+
+      // 9. 投稿結果を検証
+      const resultText = await page.evaluate(() => document.body.innerText);
+      const currentUrl = page.url();
+      console.log(`  📍 投稿後URL: ${currentUrl}`);
+
+      if (resultText.includes('完了') || resultText.includes('成功') || resultText.includes('登録しました')) {
+        console.log(`  ✅ 投稿完了（ページに完了メッセージ確認）`);
+        return { success: true };
+      } else if (resultText.includes('エラー') || resultText.includes('失敗')) {
+        const errMsg = resultText.substring(0, 200);
+        console.log(`  ❌ ページにエラー表示: ${errMsg}`);
+        return { success: false, error: `ページにエラー表示: ${errMsg}` };
+      } else {
+        console.log(`  ⚠️ 投稿結果が不明です。スクリーンショットを確認してください。`);
+        console.log(`  📄 ページ内容（先頭200文字）: ${resultText.substring(0, 200)}`);
+        return { success: true, warning: '投稿結果が不明。スクリーンショットで確認してください。' };
+      }
     } catch (e) {
       await this._screenshot(page, 'post-error');
       console.error(`  ❌ 投稿失敗: ${e.message}`);
