@@ -332,11 +332,50 @@ router.post('/mitene/random-send', (req, res) => {
   const accounts = loadMiteneAccounts();
   const rangeMs = rangeEnd.getTime() - rangeStart.getTime();
 
+  // 日記投稿のスケジュール時刻を取得して重複回避（±10分）
+  const BUFFER_MS = 10 * 60 * 1000; // 10分
+  let diaryTimes = [];
+  try {
+    const settings = fs.existsSync(SETTINGS_PATH) ? JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) : {};
+    const cronExpr = settings.schedule || '0 */3 8-23 * * *';
+    // cronから次24時間の日記投稿時刻を計算
+    const parts = cronExpr.split(' ');
+    if (parts.length >= 6) {
+      const cronMin = parts[1] === '0' ? [0] : [0];
+      const cronHourPart = parts[2];
+      const hourRange = parts[3] || '*';
+      let hours = [];
+      if (cronHourPart.startsWith('*/')) {
+        const step = parseInt(cronHourPart.substring(2));
+        const [hStart, hEnd] = hourRange.includes('-') ? hourRange.split('-').map(Number) : [0, 23];
+        for (let h = hStart; h <= hEnd; h += step) hours.push(h);
+      }
+      const baseDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      for (const h of hours) {
+        const t = new Date(baseDate.getTime() + h * 3600000);
+        diaryTimes.push(t);
+        // 翌日分も追加
+        const t2 = new Date(t.getTime() + 86400000);
+        diaryTimes.push(t2);
+      }
+    }
+  } catch (e) { /* 無視 */ }
+
+  // ランダム時刻を生成（日記時刻と±10分被らないようにする）
+  function isConflict(time) {
+    return diaryTimes.some(dt => Math.abs(time.getTime() - dt.getTime()) < BUFFER_MS);
+  }
+
   // 各アカウントにランダムな時刻を割り当て
   const scheduled = accountIds.map(id => {
     const acc = accounts.find(a => a.id === id);
-    const randomMs = Math.floor(Math.random() * rangeMs);
-    const sendTime = new Date(rangeStart.getTime() + randomMs);
+    let sendTime;
+    let attempts = 0;
+    do {
+      const randomMs = Math.floor(Math.random() * rangeMs);
+      sendTime = new Date(rangeStart.getTime() + randomMs);
+      attempts++;
+    } while (isConflict(sendTime) && attempts < 50);
     return { id, name: acc ? acc.name : id, sendTime };
   });
 
@@ -383,6 +422,7 @@ router.get('/settings', (req, res) => {
       const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
       // APIキーはマスクして返す（フロントにそのまま返さない）
       if (settings.geminiApiKey) settings.geminiApiKey = '***';
+      if (settings.openaiApiKey) settings.openaiApiKey = '***';
       res.json(settings);
     } else {
       res.json({
@@ -399,21 +439,29 @@ router.get('/settings', (req, res) => {
 router.put('/settings', (req, res) => {
   const dir = path.dirname(SETTINGS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  // APIキーが送られてきた場合、既存設定とマージ
+  // 既存設定を読み込み
+  let existing = {};
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) existing = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+  } catch (e) { /* 無視 */ }
+  // Gemini APIキー: 送られてきた場合のみ更新、なければ既存を保持
   if (req.body.geminiApiKey) {
-    try {
-      const existing = fs.existsSync(SETTINGS_PATH) ? JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) : {};
-      req.body.geminiApiKey = req.body.geminiApiKey || existing.geminiApiKey;
-    } catch (e) { /* 無視 */ }
-    // AIモデルキャッシュをリセット
-    try { require('../services/ai-generator').model = null; } catch (e) { /* 無視 */ }
-  } else {
-    // APIキーが送られてない場合は既存のキーを保持
-    try {
-      const existing = fs.existsSync(SETTINGS_PATH) ? JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8')) : {};
-      if (existing.geminiApiKey) req.body.geminiApiKey = existing.geminiApiKey;
-    } catch (e) { /* 無視 */ }
+    // 新しいキーが入力された
+  } else if (existing.geminiApiKey) {
+    req.body.geminiApiKey = existing.geminiApiKey;
   }
+  // OpenAI APIキー: 同様
+  if (req.body.openaiApiKey) {
+    // 新しいキーが入力された
+  } else if (existing.openaiApiKey) {
+    req.body.openaiApiKey = existing.openaiApiKey;
+  }
+  // AIモデルキャッシュをリセット
+  try {
+    const ai = require('../services/ai-generator');
+    ai._geminiModels = {};
+    ai._openaiClient = null;
+  } catch (e) { /* 無視 */ }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(req.body, null, 2), 'utf-8');
   gitSync.push('設定更新');
   res.json(req.body);

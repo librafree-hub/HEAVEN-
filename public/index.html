@@ -359,22 +359,47 @@
 
         <form id="form-settings" onsubmit="App.saveSettings(event)">
           <div class="card">
-            <h3>Gemini AI（日記生成）</h3>
+            <h3>AI設定（日記生成）</h3>
             <div class="form-group">
-              <label>Gemini APIキー</label>
-              <input type="password" id="set-geminiApiKey" placeholder="Gemini APIキーを入力">
-              <small>APIキーは <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a> で無料で取得できます</small>
-            </div>
-            <div class="form-group">
-              <label>AIモデル</label>
-              <select id="set-geminiModel">
-                <option value="gemini-2.0-flash">gemini-2.0-flash（デフォルト）</option>
-                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite（軽量）</option>
-                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite（新型・軽量）</option>
-                <option value="gemini-2.5-flash">gemini-2.5-flash（新型・高性能）</option>
+              <label>AIプロバイダー</label>
+              <select id="set-aiProvider" onchange="App.toggleAIProvider()">
+                <option value="gemini">Gemini（無料）</option>
+                <option value="openai">OpenAI / ChatGPT（有料）</option>
               </select>
-              <small>上限エラーが出たら別のモデルに切り替えると使える場合があります</small>
             </div>
+
+            <div id="gemini-settings">
+              <div class="form-group">
+                <label>Gemini APIキー</label>
+                <input type="password" id="set-geminiApiKey" placeholder="Gemini APIキーを入力">
+                <small>APIキーは <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a> で無料で取得できます</small>
+              </div>
+              <div class="form-group">
+                <label>Geminiモデル</label>
+                <select id="set-geminiModel">
+                  <option value="gemini-2.0-flash">gemini-2.0-flash（デフォルト）</option>
+                  <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite（軽量）</option>
+                  <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite（新型・軽量）</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash（新型・高性能）</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="openai-settings" style="display:none">
+              <div class="form-group">
+                <label>OpenAI APIキー</label>
+                <input type="password" id="set-openaiApiKey" placeholder="sk-...">
+                <small>APIキーは <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a> で取得できます（※ChatGPT課金とは別です）</small>
+              </div>
+              <div class="form-group">
+                <label>OpenAIモデル</label>
+                <select id="set-openaiModel">
+                  <option value="gpt-4o-mini">gpt-4o-mini（安い・おすすめ）</option>
+                  <option value="gpt-4o">gpt-4o（高性能・高い）</option>
+                </select>
+              </div>
+            </div>
+            <small>※上限エラーが出たら自動的に別のモデルにフォールバックします</small>
           </div>
 
           <div class="card">

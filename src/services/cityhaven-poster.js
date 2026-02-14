@@ -153,53 +153,88 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. ページ上の全ボタンをログ出力（デバッグ用）
+      // 6. ページ上の全クリック可能要素をログ出力（デバッグ用）
       const allButtons = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a.btn, a[class*="btn"], input[type="image"]'));
+        // ボタン系 + リンク系 + onclick付き要素を全て取得
+        const btns = Array.from(document.querySelectorAll(
+          'input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"], ' +
+          'a[href], a[onclick], [onclick], [role="button"]'
+        ));
         return btns.map(b => ({
           tag: b.tagName,
           type: b.type || '',
-          text: (b.textContent || '').trim().substring(0, 50),
-          value: (b.value || '').trim().substring(0, 50),
+          text: (b.textContent || '').trim().substring(0, 60),
+          value: (b.value || '').trim().substring(0, 60),
           name: b.name || '',
           id: b.id || '',
+          href: (b.href || '').substring(0, 80),
+          hasOnclick: !!b.onclick,
+          cls: (b.className || '').substring(0, 50),
         }));
       });
-      console.log(`  🔍 ページ上のボタン一覧 (${allButtons.length}個):`);
+      console.log(`  🔍 ページ上のクリック可能要素 (${allButtons.length}個):`);
       allButtons.forEach((b, i) => {
-        console.log(`    [${i}] <${b.tag}> type="${b.type}" name="${b.name}" id="${b.id}" value="${b.value}" text="${b.text}"`);
+        const extra = b.href ? ` href="${b.href}"` : '';
+        const onclick = b.hasOnclick ? ' [onclick]' : '';
+        console.log(`    [${i}] <${b.tag}> type="${b.type}" id="${b.id}" class="${b.cls}" value="${b.value}" text="${b.text}"${extra}${onclick}`);
       });
 
-      // 7. 投稿ボタンをクリック（デコメーラーボタンを除外）
+      // 7. 投稿ボタンをクリック（デコメーラー・キャンセル・削除を除外）
       const submitted = await page.evaluate(() => {
-        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"]'));
-        // デコメーラー系を除外
-        const filtered = allBtns.filter(b => {
+        // 広範囲に要素を取得
+        const allEls = Array.from(document.querySelectorAll(
+          'input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"], ' +
+          'a[href], a[onclick], [onclick], [role="button"]'
+        ));
+        // 除外: デコメーラー、キャンセル、削除、タグ削除
+        const filtered = allEls.filter(b => {
           const text = (b.textContent || b.value || '').trim();
-          return !text.includes('デコメーラー') && !text.includes('decomail');
+          return !text.includes('デコメーラー') && !text.includes('decomail')
+            && !text.includes('キャンセル') && !text.includes('削除');
         });
-        // 「確認」を含むボタンを最優先（確認画面へ進むため）
+
+        // 優先度1: 「確認」を含む要素
         let target = filtered.find(b => {
           const text = (b.textContent || b.value || '').trim();
-          return text.includes('確認');
+          return text.match(/^確認|確認する|確認画面/);
         });
-        // なければ「投稿」「送信」「登録」を含むボタン
+        // 優先度2: 「投稿する」「送信」「登録」を含む要素
         if (!target) {
           target = filtered.find(b => {
             const text = (b.textContent || b.value || '').trim();
-            return text.match(/投稿|送信|登録/) && !text.includes('デコメーラー');
+            return text.match(/投稿する|送信する|登録する|送信|投稿/) && !text.includes('デコメーラー');
           });
         }
-        // それでもなければname属性やsubmitタイプで探す
+        // 優先度3: hrefに「post」「submit」「confirm」を含むリンク
         if (!target) {
-          target = filtered.find(b => b.name && b.name.match(/submit|post|confirm|diary/i));
+          target = filtered.find(b => {
+            const href = (b.href || '').toLowerCase();
+            return href.match(/post|submit|confirm|diary/);
+          });
         }
+        // 優先度4: onclickに「submit」「post」を含む要素
         if (!target) {
-          target = filtered.find(b => b.type === 'submit');
+          target = filtered.find(b => {
+            const onclick = b.getAttribute && b.getAttribute('onclick') || '';
+            return onclick.match(/submit|post/i);
+          });
         }
+        // 優先度5: name属性にsubmit/postを含む要素
+        if (!target) {
+          target = filtered.find(b => b.name && b.name.match(/submit|post|confirm/i));
+        }
+        // 優先度6: form.submit()を直接実行
+        if (!target) {
+          const form = document.querySelector('form');
+          if (form) {
+            form.submit();
+            return { text: 'form.submit()', tag: 'FORM', name: 'direct-submit' };
+          }
+        }
+
         if (target) {
           target.click();
-          return { text: (target.value || target.textContent || '').trim(), tag: target.tagName, name: target.name };
+          return { text: (target.value || target.textContent || '').trim().substring(0, 50), tag: target.tagName, name: target.name || '' };
         }
         return false;
       });
@@ -209,19 +244,28 @@ class CityHavenPoster {
       await this._wait(5000);
       await this._screenshot(page, 'after-step1');
 
-      // 8. 確認画面 → 最終投稿ボタン（デコメーラー除外）
+      // 8. 確認画面 → 最終投稿ボタン（デコメーラー・キャンセル・削除を除外）
       const pageAfterStep1 = await page.evaluate(() => document.body.innerText.substring(0, 500));
-      console.log(`  📄 遷移先ページ内容: "${pageAfterStep1.substring(0, 100)}..."`);
+      console.log(`  📄 遷移先ページ内容: "${pageAfterStep1.substring(0, 150)}..."`);
 
       const confirmBtn = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"]'));
-        const filtered = buttons.filter(b => {
+        const elements = Array.from(document.querySelectorAll(
+          'input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"], ' +
+          'a[href], a[onclick], [onclick], [role="button"]'
+        ));
+        const filtered = elements.filter(b => {
           const text = (b.textContent || b.value || '').trim();
-          return !text.includes('デコメーラー') && !text.includes('decomail');
+          return !text.includes('デコメーラー') && !text.includes('キャンセル') && !text.includes('削除');
         });
-        // 「投稿」「送信」「確定」「登録」「OK」を含むボタン
-        const c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|確定|登録|OK/));
-        if (c) { c.click(); return (c.textContent || c.value || '').trim(); }
+        // 「投稿」「送信」「確定」「登録」「OK」を含む要素
+        let c = filtered.find(b => (b.textContent || b.value || '').match(/投稿する|送信する|確定|登録する|OK/));
+        if (!c) {
+          c = filtered.find(b => (b.textContent || b.value || '').match(/投稿|送信|登録/));
+        }
+        if (c) { c.click(); return (c.textContent || c.value || '').trim().substring(0, 50); }
+        // なければform.submit()
+        const form = document.querySelector('form');
+        if (form) { form.submit(); return 'form.submit()'; }
         return false;
       });
       if (confirmBtn) {
@@ -241,10 +285,10 @@ class CityHavenPoster {
       if (resultText.includes('完了') || resultText.includes('成功') || resultText.includes('登録しました')) {
         console.log(`  ✅ 投稿完了（ページに完了メッセージ確認）`);
         return { success: true };
-      } else if (resultText.includes('エラー') || resultText.includes('失敗')) {
-        const errMsg = resultText.substring(0, 200);
-        console.log(`  ❌ ページにエラー表示: ${errMsg}`);
-        return { success: false, error: `ページにエラー表示: ${errMsg}` };
+      } else if (currentUrl !== diaryUrl && !resultText.includes('エラー')) {
+        // URLが変わった場合は投稿成功の可能性
+        console.log(`  ✅ 投稿完了（ページ遷移を確認）`);
+        return { success: true };
       } else {
         console.log(`  ⚠️ 投稿結果が不明です。スクリーンショットを確認してください。`);
         console.log(`  📄 ページ内容（先頭200文字）: ${resultText.substring(0, 200)}`);

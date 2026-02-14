@@ -2,33 +2,50 @@ const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@googl
 const fs = require('fs');
 const path = require('path');
 
-// 現在有効なモデル一覧（1.5系は全て廃止済み）
-const FALLBACK_MODELS = [
+// Gemini: 現在有効なモデル一覧（1.5系は全て廃止済み）
+const GEMINI_FALLBACK = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
 ];
 
+// OpenAI: フォールバックモデル
+const OPENAI_FALLBACK = [
+  'gpt-4o-mini',
+  'gpt-4o',
+];
+
 class AIGenerator {
   constructor() {
-    this._models = {};
+    this._geminiModels = {};
+    this._openaiClient = null;
   }
 
-  _getApiKey() {
+  _loadSettings() {
+    try {
+      const settingsPath = path.join(__dirname, '../../config/settings.json');
+      if (fs.existsSync(settingsPath)) {
+        return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      }
+    } catch (e) { /* デフォルト使用 */ }
+    return {};
+  }
+
+  // --- Gemini ---
+  _getGeminiApiKey() {
     const settings = this._loadSettings();
     const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-      throw new Error('GEMINI_API_KEYが設定されていません。設定ページでAPIキーを入力してください。');
+      throw new Error('Gemini APIキーが設定されていません。設定ページで入力してください。');
     }
     return apiKey;
   }
 
-  _getModel(modelName) {
-    if (this._models[modelName]) return this._models[modelName];
-
-    const genAI = new GoogleGenerativeAI(this._getApiKey());
-    this._models[modelName] = genAI.getGenerativeModel({
+  _getGeminiModel(modelName) {
+    if (this._geminiModels[modelName]) return this._geminiModels[modelName];
+    const genAI = new GoogleGenerativeAI(this._getGeminiApiKey());
+    this._geminiModels[modelName] = genAI.getGenerativeModel({
       model: modelName,
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -37,40 +54,99 @@ class AIGenerator {
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     });
-    return this._models[modelName];
+    return this._geminiModels[modelName];
   }
 
-  // サンプル日記を取得（保存済みファイル or アカウント内テキスト）
+  async _generateWithGemini(prompt, settings) {
+    const preferred = settings.geminiModel || 'gemini-2.0-flash';
+    const modelOrder = [preferred, ...GEMINI_FALLBACK.filter(m => m !== preferred)];
+    const errors = [];
+
+    for (const modelName of modelOrder) {
+      try {
+        const model = this._getGeminiModel(modelName);
+        console.log(`  🤖 Gemini: ${modelName}`);
+        const result = await model.generateContent(prompt);
+        const text = (result.response.text() || '').trim();
+        if (text) return { text, model: modelName };
+        console.log(`  ⚠️ ${modelName} → 応答が空。次のモデルへ...`);
+        errors.push(`${modelName}: 応答が空`);
+      } catch (e) {
+        const msg = e.message || '';
+        if (msg.includes('401') || msg.includes('403') || msg.includes('API_KEY')) throw e;
+        const reason = msg.includes('429') ? '上限到達' : msg.includes('404') ? 'モデル廃止' : 'エラー';
+        console.log(`  ⚠️ ${modelName} → ${reason}。次のモデルへ...`);
+        errors.push(`${modelName}: ${reason}`);
+      }
+    }
+    throw new Error(`Gemini全モデル失敗:\n${errors.join('\n')}`);
+  }
+
+  // --- OpenAI ---
+  _getOpenAIClient() {
+    if (this._openaiClient) return this._openaiClient;
+    const settings = this._loadSettings();
+    const apiKey = settings.openaiApiKey;
+    if (!apiKey) throw new Error('OpenAI APIキーが設定されていません。設定ページで入力してください。');
+    const OpenAI = require('openai');
+    this._openaiClient = new OpenAI({ apiKey });
+    return this._openaiClient;
+  }
+
+  async _generateWithOpenAI(prompt, settings) {
+    const client = this._getOpenAIClient();
+    const preferred = settings.openaiModel || 'gpt-4o-mini';
+    const modelOrder = [preferred, ...OPENAI_FALLBACK.filter(m => m !== preferred)];
+    const errors = [];
+
+    for (const modelName of modelOrder) {
+      try {
+        console.log(`  🤖 OpenAI: ${modelName}`);
+        const response = await client.chat.completions.create({
+          model: modelName,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 2000,
+          temperature: 0.8,
+        });
+        const text = (response.choices[0]?.message?.content || '').trim();
+        if (text) return { text, model: modelName };
+        console.log(`  ⚠️ ${modelName} → 応答が空。次のモデルへ...`);
+        errors.push(`${modelName}: 応答が空`);
+      } catch (e) {
+        const msg = e.message || '';
+        if (msg.includes('401') || msg.includes('Incorrect API key')) throw e;
+        const reason = msg.includes('429') ? '上限到達' : 'エラー';
+        console.log(`  ⚠️ ${modelName} → ${reason}。次のモデルへ...`);
+        errors.push(`${modelName}: ${reason}`);
+      }
+    }
+    throw new Error(`OpenAI全モデル失敗:\n${errors.join('\n')}`);
+  }
+
+  // --- サンプル日記 ---
   _getSampleDiaries(account) {
-    // 1. アカウントに直接テキストがある場合
     if (account.sampleDiaries && account.sampleDiaries.trim()) {
       const samples = account.sampleDiaries.split(/\n\s*\n/).filter(s => s.trim().length > 20);
       if (samples.length > 0) return samples;
     }
-
-    // 2. スクレイプ済みファイルがある場合
     try {
       const diaryScraper = require('./diary-scraper');
       const entries = diaryScraper.loadSamples(account.id);
-      if (entries.length > 0) {
-        return entries.map(e => `【${e.title}】\n${e.body}`);
-      }
+      if (entries.length > 0) return entries.map(e => `【${e.title}】\n${e.body}`);
     } catch (e) { /* 無視 */ }
-
     return [];
   }
 
-  // 日記テキストを生成
+  // --- メイン生成 ---
   async generateDiary(account, imagePath) {
     const settings = this._loadSettings();
     const minChars = settings.minChars || 450;
     const maxChars = settings.maxChars || 1000;
+    const provider = settings.aiProvider || 'gemini';
 
-    // サンプル日記があればプロンプトに含める
     const samples = this._getSampleDiaries(account);
     let sampleSection = '';
     if (samples.length > 0) {
-      // 最大5件をランダムに選択
       const shuffled = [...samples].sort(() => Math.random() - 0.5);
       const picked = shuffled.slice(0, 5);
       sampleSection = `\n【過去の日記サンプル（この文体・口調・雰囲気を真似てください）】\n${picked.map((s, i) => `--- サンプル${i + 1} ---\n${s}`).join('\n\n')}\n\n★重要: 上記サンプルの文体、口調、絵文字の使い方、改行の入れ方、言い回しを忠実に真似てください。サンプルの内容をそのままコピーせず、同じ雰囲気で新しい内容を書いてください。\n`;
@@ -102,61 +178,39 @@ ${samples.length > 0 ? '- サンプル日記の文体を最優先で真似るこ
 
 タイトルと本文だけを出力してください。余計な説明は不要です。`;
 
-    // 設定モデルを先頭にしたフォールバック順を作成
-    const preferred = settings.geminiModel || 'gemini-2.0-flash';
-    const modelOrder = [preferred, ...FALLBACK_MODELS.filter(m => m !== preferred)];
+    console.log(`  🧠 AIプロバイダー: ${provider === 'openai' ? 'OpenAI' : 'Gemini'}`);
 
-    let result;
-    let usedModel = '';
-    const errors = [];
-    for (const modelName of modelOrder) {
+    const MAX_RETRIES = 2;
+    const allErrors = [];
+
+    for (let retry = 0; retry <= MAX_RETRIES; retry++) {
       try {
-        const model = this._getModel(modelName);
-        console.log(`  🤖 モデル: ${modelName}`);
-        result = await model.generateContent(prompt);
-        usedModel = modelName;
-        break;
-      } catch (e) {
-        const msg = e.message || '';
-        // 認証エラーは即座に停止（APIキーが間違っている）
-        if (msg.includes('401') || msg.includes('403') || msg.includes('API_KEY')) {
-          throw e;
+        const generateFn = provider === 'openai'
+          ? this._generateWithOpenAI.bind(this)
+          : this._generateWithGemini.bind(this);
+
+        const { text, model } = await generateFn(prompt, settings);
+
+        const lines = text.split('\n');
+        const title = lines[0].replace(/^#\s*/, '').trim();
+        const body = lines.slice(1).join('\n').trim();
+
+        if (!body || body.length < 50) {
+          console.log(`  ⚠️ ${model} → 本文が短すぎます（${body.length}文字）。リトライ${retry + 1}/${MAX_RETRIES}...`);
+          allErrors.push(`${model}: 本文${body.length}文字（短すぎ）`);
+          continue;
         }
-        // 429（上限）、404（モデル廃止）、その他 → 次のモデルへ
-        const reason = msg.includes('429') ? '上限到達' : msg.includes('404') ? 'モデル廃止' : 'エラー';
-        console.log(`  ⚠️ ${modelName} → ${reason}。次のモデルを試します...`);
-        errors.push(`${modelName}: ${reason}`);
-        continue;
+
+        return { title: title.substring(0, 20), body, charCount: body.length };
+      } catch (e) {
+        allErrors.push(e.message);
+        if (retry < MAX_RETRIES) {
+          console.log(`  ⚠️ リトライ${retry + 1}/${MAX_RETRIES}...`);
+        }
       }
     }
-    if (!result) {
-      throw new Error(`全モデルで生成失敗:\n${errors.join('\n')}\n\n時間を置くか、APIキーの課金設定を確認してください。`);
-    }
-    if (usedModel !== preferred) {
-      console.log(`  ✅ ${usedModel} で生成成功（フォールバック）`);
-    }
-    const text = result.response.text().trim();
 
-    // タイトルと本文を分離
-    const lines = text.split('\n');
-    const title = lines[0].replace(/^#\s*/, '').trim();
-    const body = lines.slice(1).join('\n').trim();
-
-    return {
-      title: title.substring(0, 20),
-      body,
-      charCount: body.length
-    };
-  }
-
-  _loadSettings() {
-    try {
-      const settingsPath = path.join(__dirname, '../../config/settings.json');
-      if (fs.existsSync(settingsPath)) {
-        return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      }
-    } catch (e) { /* デフォルト使用 */ }
-    return {};
+    throw new Error(`AI生成失敗:\n${allErrors.join('\n')}\n\n時間を置くか、APIキーの設定を確認してください。`);
   }
 }
 
