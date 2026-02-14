@@ -2,25 +2,31 @@ const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@googl
 const fs = require('fs');
 const path = require('path');
 
+const FALLBACK_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+];
+
 class AIGenerator {
   constructor() {
-    this.model = null;
+    this._models = {};
   }
 
-  _getModel() {
-    // 毎回settings.jsonから読み直す（モデル変更に対応）
+  _getApiKey() {
     const settings = this._loadSettings();
     const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') {
       throw new Error('GEMINI_API_KEYが設定されていません。設定ページでAPIキーを入力してください。');
     }
-    const modelName = settings.geminiModel || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    return apiKey;
+  }
 
-    // モデル名が変わったらキャッシュリセット
-    if (this.model && this._currentModel === modelName) return this.model;
+  _getModel(modelName) {
+    if (this._models[modelName]) return this._models[modelName];
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({
+    const genAI = new GoogleGenerativeAI(this._getApiKey());
+    this._models[modelName] = genAI.getGenerativeModel({
       model: modelName,
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -29,8 +35,7 @@ class AIGenerator {
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     });
-    this._currentModel = modelName;
-    return this.model;
+    return this._models[modelName];
   }
 
   // サンプル日記を取得（保存済みファイル or アカウント内テキスト）
@@ -55,8 +60,6 @@ class AIGenerator {
 
   // 日記テキストを生成
   async generateDiary(account, imagePath) {
-    const model = this._getModel();
-
     const settings = this._loadSettings();
     const minChars = settings.minChars || 450;
     const maxChars = settings.maxChars || 1000;
@@ -97,21 +100,32 @@ ${samples.length > 0 ? '- サンプル日記の文体を最優先で真似るこ
 
 タイトルと本文だけを出力してください。余計な説明は不要です。`;
 
-    // テキストのみでGeminiに生成依頼（429なら最大2回リトライ）
+    // 設定モデルを先頭にしたフォールバック順を作成
+    const preferred = settings.geminiModel || 'gemini-2.0-flash';
+    const modelOrder = [preferred, ...FALLBACK_MODELS.filter(m => m !== preferred)];
+
     let result;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    let usedModel = '';
+    for (const modelName of modelOrder) {
       try {
+        const model = this._getModel(modelName);
+        console.log(`  🤖 モデル: ${modelName}`);
         result = await model.generateContent(prompt);
+        usedModel = modelName;
         break;
       } catch (e) {
-        if (e.message && e.message.includes('429') && attempt < 2) {
-          const wait = (attempt + 1) * 30;
-          console.log(`  ⏳ レート制限 - ${wait}秒待機して再試行... (${attempt + 1}/2)`);
-          await new Promise(r => setTimeout(r, wait * 1000));
+        if (e.message && e.message.includes('429')) {
+          console.log(`  ⚠️ ${modelName} → 上限到達。次のモデルを試します...`);
           continue;
         }
         throw e;
       }
+    }
+    if (!result) {
+      throw new Error('全モデルの無料枠を使い切りました。時間を置くか、APIキーの課金設定を確認してください。');
+    }
+    if (usedModel !== preferred) {
+      console.log(`  ✅ ${usedModel} で生成成功（フォールバック）`);
     }
     const text = result.response.text().trim();
 
