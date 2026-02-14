@@ -124,9 +124,8 @@ class CityHavenPoster {
       await page.type(SELECTORS.title, diary.title, { delay: 30 });
       console.log(`  ✏️ タイトル入力完了: "${diary.title}"`);
 
-      // 4. 本文入力（focus + value設定 + 全イベント発火）
+      // 4. 本文入力（evaluate内でfocus + value設定 + イベント発火）
       await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-      await page.click(SELECTORS.body);
       await page.evaluate((sel, text) => {
         const el = document.querySelector(sel);
         el.focus();
