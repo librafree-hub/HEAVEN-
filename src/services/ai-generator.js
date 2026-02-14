@@ -2,11 +2,12 @@ const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@googl
 const fs = require('fs');
 const path = require('path');
 
+// 現在有効なモデル一覧（1.5系は全て廃止済み）
 const FALLBACK_MODELS = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-8b',
-  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
 ];
 
 class AIGenerator {
@@ -107,6 +108,7 @@ ${samples.length > 0 ? '- サンプル日記の文体を最優先で真似るこ
 
     let result;
     let usedModel = '';
+    const errors = [];
     for (const modelName of modelOrder) {
       try {
         const model = this._getModel(modelName);
@@ -115,15 +117,20 @@ ${samples.length > 0 ? '- サンプル日記の文体を最優先で真似るこ
         usedModel = modelName;
         break;
       } catch (e) {
-        if (e.message && e.message.includes('429')) {
-          console.log(`  ⚠️ ${modelName} → 上限到達。次のモデルを試します...`);
-          continue;
+        const msg = e.message || '';
+        // 認証エラーは即座に停止（APIキーが間違っている）
+        if (msg.includes('401') || msg.includes('403') || msg.includes('API_KEY')) {
+          throw e;
         }
-        throw e;
+        // 429（上限）、404（モデル廃止）、その他 → 次のモデルへ
+        const reason = msg.includes('429') ? '上限到達' : msg.includes('404') ? 'モデル廃止' : 'エラー';
+        console.log(`  ⚠️ ${modelName} → ${reason}。次のモデルを試します...`);
+        errors.push(`${modelName}: ${reason}`);
+        continue;
       }
     }
     if (!result) {
-      throw new Error('全モデルの無料枠を使い切りました。時間を置くか、APIキーの課金設定を確認してください。');
+      throw new Error(`全モデルで生成失敗:\n${errors.join('\n')}\n\n時間を置くか、APIキーの課金設定を確認してください。`);
     }
     if (usedModel !== preferred) {
       console.log(`  ✅ ${usedModel} で生成成功（フォールバック）`);
