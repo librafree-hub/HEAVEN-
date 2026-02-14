@@ -398,6 +398,18 @@ const App = {
     document.querySelectorAll('.mitene-select-cb').forEach(cb => cb.checked = checked);
   },
 
+  miteneRandomSelect() {
+    const all = [...document.querySelectorAll('.mitene-select-cb')];
+    const count = parseInt(document.getElementById('mitene-random-count').value) || 1;
+    // まず全部外す
+    all.forEach(cb => cb.checked = false);
+    document.getElementById('mitene-select-all').checked = false;
+    // シャッフルしてN人選択
+    const shuffled = [...all].sort(() => Math.random() - 0.5);
+    const pick = Math.min(count, shuffled.length);
+    for (let i = 0; i < pick; i++) shuffled[i].checked = true;
+  },
+
   async miteneRandomSend() {
     const selected = [...document.querySelectorAll('.mitene-select-cb:checked')].map(cb => cb.value);
     if (selected.length === 0) { alert('送信する子を選択してください'); return; }

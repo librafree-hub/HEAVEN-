@@ -258,6 +258,10 @@
             <div style="display:flex; align-items:center; gap:12px;">
               <h3 style="margin-bottom:0;">ミテネ アカウント</h3>
               <label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="mitene-select-all" onchange="App.toggleMiteneSelectAll()"> 全選択</label>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <input type="number" id="mitene-random-count" min="1" value="3" style="width:50px; padding:2px 6px; font-size:13px;">
+                <button class="btn btn-sm btn-secondary" onclick="App.miteneRandomSelect()">人ランダム選択</button>
+              </div>
             </div>
             <button class="btn btn-sm btn-mitene" onclick="App.showAddMiteneAccount()">+ 追加</button>
           </div>

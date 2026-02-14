@@ -502,6 +502,15 @@ class MiteneSender {
       const loggedIn = await this._login(page, account);
       if (!loggedIn) return { success: false, error: 'ログイン失敗' };
 
+      // 使い切りチェック（トップページで検出）
+      const usedUp = await page.evaluate(() => {
+        return document.body.innerText.includes('使い切りました');
+      });
+      if (usedUp) {
+        console.log(`  ⏭️ 本日分のミテネは使い切り済み。スキップします。`);
+        return { success: true, count: 0, skipped: 0, message: '本日分のミテネは使い切り済み' };
+      }
+
       // ステップ2: 「キテネできる会員を探す」をクリック
       const found = await this._findMembers(page);
       if (!found) return { success: false, error: '「キテネ/ミテネできる会員を探す」が見つかりません' };
