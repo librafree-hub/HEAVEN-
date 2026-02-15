@@ -27,6 +27,13 @@ if errorlevel 1 (
 echo.
 
 echo [3/3] サーバー起動中...
+echo.
+REM 既にサーバーが動いている場合は停止
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do (
+    echo   既存のサーバーを停止しています...
+    taskkill /f /pid %%a >nul 2>&1
+)
+timeout /t 1 /nobreak >nul
 echo ================================================
 echo   ※このウィンドウは閉じないでください
 echo ================================================
