@@ -148,45 +148,56 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // 6. フォームを直接submit（ボタン探しをせず確実に送信）
-      console.log(`  📤 フォーム送信中...`);
+      // 6. 送信ボタンをクリック（ページ上の全submitボタンを探す）
+      console.log(`  📤 送信ボタンを探しています...`);
+      const btnInfo = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
+        return btns.map(b => ({ text: (b.value || b.textContent || '').trim(), tag: b.tagName }));
+      });
+      console.log(`  🔍 submitボタン: ${JSON.stringify(btnInfo)}`);
+
+      // submitボタンをクリック（「投稿」を含むものを優先、なければ最初のsubmit）
       await Promise.all([
         page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null),
         page.evaluate(() => {
-          const form = document.querySelector('form');
-          if (form) { form.submit(); return true; }
+          const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
+          // 「投稿」を含むボタンを優先
+          let target = btns.find(b => (b.value || b.textContent || '').includes('投稿'));
+          // なければキャンセル以外の最初のsubmit
+          if (!target) target = btns.find(b => !(b.value || b.textContent || '').includes('キャンセル'));
+          // それでもなければ最初のsubmit
+          if (!target) target = btns[0];
+          if (target) { target.click(); return (target.value || target.textContent || '').trim(); }
           return false;
         })
       ]);
-      await this._wait(3000);
+      await this._wait(5000);
       await this._screenshot(page, 'after-submit');
 
       // 7. 遷移後のページを確認
       const afterUrl = page.url();
-      const afterText = await page.evaluate(() => document.body.innerText.substring(0, 500));
+      const afterText = await page.evaluate(() => document.body.innerText.substring(0, 1000));
       console.log(`  📍 送信後URL: ${afterUrl}`);
-      console.log(`  📄 送信後ページ: "${afterText.substring(0, 150)}..."`);
+      console.log(`  📄 送信後ページ: "${afterText.substring(0, 200)}..."`);
 
-      // 8. 確認画面がある場合 → 投稿ボタンをクリック
-      if (afterText.includes('確認') || afterText.includes('内容を確認')) {
-        console.log(`  📋 確認画面を検出 → 投稿ボタンを探します`);
+      // 8. 確認画面の場合 → 最終投稿ボタンをクリック
+      //    ただし元の投稿ページに戻っただけなら確認画面ではない
+      const isConfirmPage = afterUrl !== diaryUrl && (afterText.includes('確認') || afterText.includes('内容'));
+      if (isConfirmPage) {
+        console.log(`  📋 確認画面を検出 → 最終投稿ボタンを探します`);
         await Promise.all([
           page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null),
           page.evaluate(() => {
-            // 確認画面の投稿ボタンを探す
-            const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, a'));
+            const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button'));
             const target = btns.find(b => {
-              const text = (b.textContent || b.value || '').trim();
+              const text = (b.value || b.textContent || '').trim();
               return text.match(/投稿|送信|確定|登録|OK/) && !text.includes('キャンセル') && !text.includes('戻る');
             });
             if (target) { target.click(); return true; }
-            // なければform.submit
-            const form = document.querySelector('form');
-            if (form) { form.submit(); return true; }
             return false;
           })
         ]);
-        await this._wait(3000);
+        await this._wait(5000);
         await this._screenshot(page, 'after-confirm');
       }
 
