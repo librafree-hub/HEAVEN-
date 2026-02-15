@@ -95,33 +95,36 @@ class CityHavenPoster {
       await page.goto(diaryUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       await this._wait(3000);
 
-      // === フォームの構造を解析 ===
-      const formInfo = await page.evaluate(() => {
-        const form = document.querySelector('form');
-        if (!form) return null;
-        const fields = [];
-        const inputs = form.querySelectorAll('input, select, textarea');
-        inputs.forEach(el => {
-          fields.push({
-            tag: el.tagName,
-            type: el.type || '',
-            name: el.name || '',
-            id: el.id || '',
-            value: (el.value || '').substring(0, 50),
-          });
-        });
-        return {
-          action: form.action || '',
-          method: form.method || 'GET',
-          enctype: form.enctype || '',
-          fieldCount: fields.length,
-          fields
-        };
+      // === ページ上の全フォーム・全入力欄・全ボタンをログ出力 ===
+      const pageStructure = await page.evaluate(() => {
+        const forms = Array.from(document.querySelectorAll('form')).map((f, i) => ({
+          index: i, action: f.action || '', method: f.method || '', enctype: f.enctype || '',
+          inputs: Array.from(f.querySelectorAll('input, select, textarea')).map(el => ({
+            tag: el.tagName, type: el.type || '', name: el.name || '', id: el.id || ''
+          }))
+        }));
+        const allInputs = Array.from(document.querySelectorAll('input[type="text"], textarea, select')).map(el => ({
+          tag: el.tagName, type: el.type || '', name: el.name || '', id: el.id || '',
+          placeholder: (el.placeholder || '').substring(0, 30)
+        }));
+        const allBtns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]')).map(b => ({
+          tag: b.tagName, type: b.type || '', name: b.name || '', id: b.id || '',
+          text: (b.value || b.textContent || '').trim().substring(0, 40)
+        }));
+        return { formCount: forms.length, forms, inputCount: allInputs.length, allInputs, btnCount: allBtns.length, allBtns };
       });
-      console.log(`  🔍 フォーム情報: action=${formInfo?.action} method=${formInfo?.method} enctype=${formInfo?.enctype}`);
-      console.log(`  🔍 フィールド数: ${formInfo?.fieldCount}`);
-      formInfo?.fields.forEach(f => {
-        console.log(`    [${f.tag}] name="${f.name}" id="${f.id}" type="${f.type}" value="${f.value}"`);
+      console.log(`  🔍 フォーム数: ${pageStructure.formCount}`);
+      pageStructure.forms.forEach(f => {
+        console.log(`    form[${f.index}] action="${f.action.substring(0, 60)}" method="${f.method}"`);
+        f.inputs.forEach(i => console.log(`      ${i.tag} name="${i.name}" id="${i.id}" type="${i.type}"`));
+      });
+      console.log(`  🔍 入力欄数: ${pageStructure.inputCount}`);
+      pageStructure.allInputs.forEach(i => {
+        console.log(`    ${i.tag} name="${i.name}" id="${i.id}" type="${i.type}" placeholder="${i.placeholder}"`);
+      });
+      console.log(`  🔍 ボタン数: ${pageStructure.btnCount}`);
+      pageStructure.allBtns.forEach(b => {
+        console.log(`    ${b.tag} name="${b.name}" id="${b.id}" type="${b.type}" text="${b.text}"`);
       });
 
       // === フォームにデータを設定 ===
@@ -155,24 +158,22 @@ class CityHavenPoster {
       await page.type(SELECTORS.title, diary.title, { delay: 30 });
       console.log(`  ✏️ タイトル入力完了: "${diary.title}"`);
 
-      // 4. 本文入力（execCommandで確実に入力を認識させる）
+      // 4. 本文入力（page.typeでキーボード入力 - textareaに確実に入力）
       await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-      await page.focus(SELECTORS.body);
-      await page.evaluate((sel, text) => {
+      // まずtextareaの中身をクリアして、フォーカスを確実に移す
+      await page.evaluate(sel => {
         const el = document.querySelector(sel);
-        el.focus();
-        el.value = '';
-        // execCommandでテキスト挿入（ブラウザネイティブの入力として認識される）
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, text);
-        // 念のためvalueも直接設定
-        if (!el.value) el.value = text;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, SELECTORS.body, diary.body);
+        if (el) { el.value = ''; el.focus(); }
+      }, SELECTORS.body);
+      await this._wait(300);
+      // page.typeでキーボード入力（textareaに確実に認識される）
+      await page.type(SELECTORS.body, diary.body, { delay: 0 });
       // 入力後の確認
-      const bodyLen = await page.evaluate(sel => (document.querySelector(sel)?.value || '').length, SELECTORS.body);
-      console.log(`  ✏️ 本文入力完了 - ${bodyLen}文字（期待: ${diary.body.length}文字）`);
+      const bodyCheck = await page.evaluate(sel => {
+        const el = document.querySelector(sel);
+        return { value: (el?.value || '').length, tag: el?.tagName || 'NONE', name: el?.name || '' };
+      }, SELECTORS.body);
+      console.log(`  ✏️ 本文入力完了 - ${bodyCheck.value}文字 (${bodyCheck.tag} name="${bodyCheck.name}")`);
 
       // 5. 画像アップロード
       if (imagePath && fs.existsSync(imagePath)) {
@@ -186,24 +187,31 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // === 送信（ボタンクリック方式）===
-      // ページ上のsubmitボタンを全てログ出力
-      const btnInfo = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
-        return btns.map(b => ({ text: (b.value || b.textContent || '').trim(), tag: b.tagName, name: b.name || '' }));
+      // === 入力後にボタンを再スキャン（本文入力後にボタンが出現する可能性） ===
+      const btnsAfter = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+        return btns.map(b => ({
+          tag: b.tagName, type: b.type || '', name: b.name || '', id: b.id || '',
+          text: (b.value || b.textContent || '').trim().substring(0, 50)
+        }));
       });
-      console.log(`  🔍 submitボタン: ${JSON.stringify(btnInfo)}`);
+      console.log(`  🔍 入力後のボタン (${btnsAfter.length}個):`);
+      btnsAfter.forEach(b => console.log(`    ${b.tag} type="${b.type}" name="${b.name}" id="${b.id}" text="${b.text}"`));
 
-      // 投稿を含むボタン → キャンセル以外 → 最初のsubmitの順で探す
+      // === 送信 ===
       console.log(`  📤 送信中...`);
       await Promise.all([
         page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null),
         page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"]'));
-          let target = btns.find(b => (b.value || b.textContent || '').includes('投稿'));
-          if (!target) target = btns.find(b => !(b.value || b.textContent || '').includes('キャンセル'));
-          if (!target && btns.length > 0) target = btns[0];
-          if (target) { target.click(); return true; }
+          const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
+          // 「投稿」「送信」を含むボタンを最優先
+          let target = btns.find(b => (b.value || b.textContent || '').match(/投稿|送信/));
+          // なければ「キャンセル」「削除」以外のsubmitボタン
+          if (!target) target = btns.find(b => {
+            const text = (b.value || b.textContent || '').trim();
+            return (b.type === 'submit') && !text.includes('キャンセル') && !text.includes('削除');
+          });
+          if (target) { target.click(); return (target.value || target.textContent || '').trim(); }
           return false;
         })
       ]);
@@ -214,11 +222,10 @@ class CityHavenPoster {
       const afterUrl = page.url();
       const afterText = await page.evaluate(() => document.body.innerText.substring(0, 1000));
       console.log(`  📍 送信後URL: ${afterUrl}`);
-      console.log(`  📄 送信後ページ（先頭200文字）: "${afterText.substring(0, 200)}"`);
+      console.log(`  📄 送信後ページ: "${afterText.substring(0, 200)}"`);
 
       // 確認画面がある場合（URLが変わった場合のみ）
       if (afterUrl !== diaryUrl) {
-        // 確認画面 or 完了画面
         const hasConfirmBtn = await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button'));
           return btns.some(b => {
@@ -256,8 +263,8 @@ class CityHavenPoster {
         console.log(`  ✅ 投稿完了（ページ遷移: ${resultUrl}）`);
         return { success: true };
       } else {
-        console.log(`  ⚠️ 投稿結果が不明。スクリーンショットを確認してください。`);
-        return { success: false, error: '投稿結果が不明。after-submitスクリーンショットを確認してください。' };
+        console.log(`  ⚠️ 投稿失敗。スクリーンショットを確認してください。`);
+        return { success: false, error: '投稿失敗。after-submitスクリーンショットを確認してください。' };
       }
     } catch (e) {
       await this._screenshot(page, 'post-error');
