@@ -30,8 +30,18 @@ gitSync.pull().then(() => {
     console.log('  HEAVEN - 自動日記投稿システム');
     console.log('═══════════════════════════════════════════');
     console.log(`  ダッシュボード: http://localhost:${PORT}`);
-    console.log('  API:            http://localhost:' + PORT + '/api');
     console.log('═══════════════════════════════════════════');
     console.log('');
+
+    // サーバー起動後にブラウザを自動で開く
+    const { exec } = require('child_process');
+    const url = `http://localhost:${PORT}`;
+    if (process.platform === 'win32') {
+      exec(`start ${url}`);
+    } else if (process.platform === 'darwin') {
+      exec(`open ${url}`);
+    } else {
+      exec(`xdg-open ${url}`).on('error', () => {});
+    }
   });
 });

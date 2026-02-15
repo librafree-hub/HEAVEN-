@@ -17,13 +17,9 @@ echo.
 
 echo [3/3] サーバー起動中...
 echo ================================================
-echo   http://localhost:3000 をブラウザで開きます
 echo   ※このウィンドウは閉じないでください
 echo ================================================
 echo.
-
-timeout /t 3 /nobreak >nul
-start http://localhost:3000
 
 call npm start
 
