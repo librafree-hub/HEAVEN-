@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const SCREENSHOT_DIR = path.join(__dirname, '../../data/logs');
+const IS_CLOUD = process.env.HEADLESS === 'true';
 
 class MiteneSender {
   constructor() {
@@ -12,9 +13,15 @@ class MiteneSender {
   async _launchBrowser() {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: false,
+        headless: IS_CLOUD ? 'new' : false,
         defaultViewport: { width: 1280, height: 900 },
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ja']
+        args: [
+          '--no-sandbox', '--disable-setuid-sandbox', '--lang=ja',
+          ...(IS_CLOUD ? ['--disable-gpu', '--disable-dev-shm-usage'] : [])
+        ],
+        ...(process.env.PUPPETEER_EXECUTABLE_PATH
+          ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+          : {})
       });
     }
     return this.browser;

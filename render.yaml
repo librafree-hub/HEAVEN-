@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: heaven
+    runtime: docker
+    plan: free
+    envVars:
+      - key: HEADLESS
+        value: "true"
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: PORT
+        value: "3000"

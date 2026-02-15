@@ -6,6 +6,25 @@ const gitSync = require('./src/services/git-sync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_CLOUD = process.env.HEADLESS === 'true';
+
+// パスワード保護（クラウドデプロイ時、外部からのアクセスを保護）
+if (process.env.DASHBOARD_PASSWORD) {
+  app.use((req, res, next) => {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Basic ')) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="HEAVEN"');
+      return res.status(401).send('パスワードが必要です');
+    }
+    const decoded = Buffer.from(auth.split(' ')[1], 'base64').toString();
+    const pass = decoded.includes(':') ? decoded.split(':').slice(1).join(':') : decoded;
+    if (pass !== process.env.DASHBOARD_PASSWORD) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="HEAVEN"');
+      return res.status(401).send('パスワードが違います');
+    }
+    next();
+  });
+}
 
 // ミドルウェア
 app.use(express.json());
@@ -33,15 +52,15 @@ function startServer() {
     console.log('═══════════════════════════════════════════');
     console.log('');
 
-    // サーバー起動後にブラウザを自動で開く
-    const { exec } = require('child_process');
-    const url = `http://localhost:${PORT}`;
-    if (process.platform === 'win32') {
-      exec(`start ${url}`);
-    } else if (process.platform === 'darwin') {
-      exec(`open ${url}`);
-    } else {
-      exec(`xdg-open ${url}`).on('error', () => {});
+    // ローカル環境のみ：サーバー起動後にブラウザを自動で開く
+    if (!IS_CLOUD) {
+      const { exec } = require('child_process');
+      const url = `http://localhost:${PORT}`;
+      if (process.platform === 'win32') {
+        exec(`start ${url}`);
+      } else if (process.platform === 'darwin') {
+        exec(`open ${url}`);
+      }
     }
   });
 
