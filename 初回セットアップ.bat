@@ -12,7 +12,7 @@ echo.
 REM ========================================
 REM 1. Node.js チェック
 REM ========================================
-echo [1/4] Node.js を確認中...
+echo [1/5] Node.js を確認中...
 where node >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -32,7 +32,7 @@ REM ========================================
 REM 2. Git チェック
 REM ========================================
 echo.
-echo [2/4] Git を確認中...
+echo [2/5] Git を確認中...
 where git >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -49,10 +49,35 @@ if errorlevel 1 (
 for /f "tokens=*" %%i in ('git --version') do echo   ✅ %%i を検出
 
 REM ========================================
-REM 3. パッケージインストール
+REM 3. GitHub認証チェック
 REM ========================================
 echo.
-echo [3/4] パッケージをインストール中...
+echo [3/5] GitHub接続を確認中...
+git fetch origin >nul 2>&1
+if errorlevel 1 (
+    echo   ⚠️  GitHubに接続できません。ログインが必要です。
+    echo.
+    echo   ブラウザでGitHubのログイン画面が出たらログインしてください。
+    echo   （初回のみ。次回以降は自動で接続されます）
+    echo.
+    git pull origin main
+    if errorlevel 1 (
+        echo.
+        echo   ❌ GitHub接続に失敗しました。
+        echo   GitHubアカウントでログインしてください。
+        echo.
+        pause
+        exit /b
+    )
+) else (
+    echo   ✅ GitHub接続OK
+)
+
+REM ========================================
+REM 4. パッケージインストール
+REM ========================================
+echo.
+echo [4/5] パッケージをインストール中...
 call npm install --silent
 if errorlevel 1 (
     echo   ❌ パッケージのインストールに失敗しました
@@ -62,10 +87,10 @@ if errorlevel 1 (
 echo   ✅ パッケージインストール完了
 
 REM ========================================
-REM 4. .env ファイル作成
+REM 5. .env ファイル作成
 REM ========================================
 echo.
-echo [4/4] 設定ファイルを確認中...
+echo [5/5] 設定ファイルを確認中...
 if exist ".env" (
     echo   ✅ .env ファイルは既に存在します
 ) else (

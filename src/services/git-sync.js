@@ -42,14 +42,16 @@ module.exports = {
   },
 
   // config変更後に自動コミット＆プッシュ
+  // 他のPCの変更も取り込んでからpushする
   async push(message) {
     await run(['add', 'config/']);
-    // data/db もトラッキング（投稿履歴保存用）
     await run(['add', 'data/db/']);
     const status = await run(['status', '--porcelain', 'config/', 'data/db/']);
     if (!status) return; // 変更なし
 
     await run(['commit', '-m', message || '設定データ更新']);
+    // push前に他PCの変更を取り込む（競合回避）
+    await run(['pull', '--rebase', '--autostash']);
     const result = await run(['push']);
     if (result !== false) {
       console.log('☁️  設定データをクラウドに保存しました');
