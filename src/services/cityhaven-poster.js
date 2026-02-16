@@ -159,29 +159,47 @@ class CityHavenPoster {
       console.log(`  🔒 公開範囲: ${visibility === 'mygirl' ? 'マイガール限定' : '全公開'}`);
       await this._wait(500);
 
-      // 3. タイトル入力（page.typeでキーボード入力）
+      // 3. タイトル入力（evaluate で直接値セット）
       await page.waitForSelector(SELECTORS.title, { timeout: 10000 });
-      await page.evaluate(sel => { const el = document.querySelector(sel); if (el) el.value = ''; }, SELECTORS.title);
-      await page.type(SELECTORS.title, diary.title, { delay: 30 });
+      await page.evaluate((sel, text) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.focus();
+          el.value = text;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, SELECTORS.title, diary.title);
       console.log(`  ✏️ タイトル入力完了: "${diary.title}"`);
 
-      // 4. 本文入力（page.typeでキーボード入力 - textareaに確実に入力）
+      // 4. 本文入力（evaluate で直接値セット + イベント発火）
       await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-      // まずtextareaの中身をクリアして、フォーカスを確実に移す
-      await page.evaluate(sel => {
+      await page.evaluate((sel, text) => {
         const el = document.querySelector(sel);
-        if (el) { el.value = ''; el.focus(); }
-      }, SELECTORS.body);
-      await this._wait(300);
-      // page.typeでキーボード入力（textareaに確実に認識される）
-      await page.type(SELECTORS.body, diary.body, { delay: 0 });
-      // 入力後の確認
-      const bodyCheck = await page.evaluate(sel => {
-        const el = document.querySelector(sel);
-        return { value: (el?.value || '').length, tag: el?.tagName || 'NONE', name: el?.name || '' };
-      }, SELECTORS.body);
-      console.log(`  ✏️ 本文入力完了 - ${bodyCheck.value}文字 (${bodyCheck.tag} name="${bodyCheck.name}")`);
-
+        if (el) {
+          el.focus();
+          el.value = text;
+          // ページのJSに入力を認識させるためイベントを発火
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' }));
+          el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
+        }
+      }, SELECTORS.body, diary.body);
+      await this._wait(1000);
+      // 入力後の確認（タイトルと本文の両方を確認）
+      const fieldCheck = await page.evaluate(() => {
+        const title = document.querySelector('#diaryTitle');
+        const body = document.querySelector('#diary');
+        return {
+          titleValue: (title?.value || '').substring(0, 50),
+          titleLen: title?.value?.length || 0,
+          bodyValue: (body?.value || '').substring(0, 50),
+          bodyLen: body?.value?.length || 0,
+        };
+      });
+      console.log(`  ✏️ 確認 - タイトル: "${fieldCheck.titleValue}" (${fieldCheck.titleLen}文字)`);
+      console.log(`  ✏️ 確認 - 本文: "${fieldCheck.bodyValue}..." (${fieldCheck.bodyLen}文字)`);
       // 5. 画像アップロード
       if (imagePath && fs.existsSync(imagePath)) {
         const fileInput = await page.$(SELECTORS.photo);
@@ -194,29 +212,35 @@ class CityHavenPoster {
 
       await this._screenshot(page, 'diary-filled');
 
-      // === 入力後にボタンを再スキャン（本文入力後にボタンが出現する可能性） ===
+      // === 入力後にボタン・リンクを再スキャン ===
       const btnsAfter = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-        return btns.map(b => ({
+        // ボタン + aタグも含めてスキャン（投稿リンクがaタグの場合がある）
+        const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a'));
+        return btns.filter(b => {
+          const text = (b.value || b.textContent || '').trim();
+          return text.length > 0 && text.length < 30;
+        }).map(b => ({
           tag: b.tagName, type: b.type || '', name: b.name || '', id: b.id || '',
+          href: b.href || '',
           text: (b.value || b.textContent || '').trim().substring(0, 50)
         }));
       });
-      console.log(`  🔍 入力後のボタン (${btnsAfter.length}個):`);
-      btnsAfter.forEach(b => console.log(`    ${b.tag} type="${b.type}" name="${b.name}" id="${b.id}" text="${b.text}"`));
+      console.log(`  🔍 入力後のボタン・リンク (${btnsAfter.length}個):`);
+      btnsAfter.forEach(b => console.log(`    ${b.tag} type="${b.type}" id="${b.id}" text="${b.text}" href="${b.href ? b.href.substring(0, 50) : ''}"`));
 
       // === 送信 ===
       console.log(`  📤 送信中...`);
       await Promise.all([
         page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null),
         page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
-          // 「投稿」「送信」を含むボタンを最優先
-          let target = btns.find(b => (b.value || b.textContent || '').match(/投稿|送信/));
-          // なければ「キャンセル」「削除」以外のsubmitボタン
-          if (!target) target = btns.find(b => {
+          // ボタン + aタグ（投稿リンク）を全てスキャン
+          const all = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a'));
+          // 1. 「投稿」「送信」「デコメーラー」を含むボタン/リンクを最優先
+          let target = all.find(b => (b.value || b.textContent || '').match(/投稿|送信|デコメーラー/));
+          // 2. なければ「キャンセル」「削除」「タグ」以外のsubmitボタン
+          if (!target) target = all.find(b => {
             const text = (b.value || b.textContent || '').trim();
-            return (b.type === 'submit') && !text.includes('キャンセル') && !text.includes('削除');
+            return (b.type === 'submit') && !text.includes('キャンセル') && !text.includes('削除') && !text.includes('タグ');
           });
           if (target) { target.click(); return (target.value || target.textContent || '').trim(); }
           return false;
