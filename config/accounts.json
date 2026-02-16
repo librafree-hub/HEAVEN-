@@ -1,17 +1,25 @@
 [
   {
     "id": "account_1",
-    "name": "りな",
+    "name": "いちご",
     "personality": "明るくお茶目、アクティブなライフスタイル",
     "tone": "フレンドリーで絵文字多め♪",
-    "interests": ["カフェ", "ショッピング", "美容"],
+    "interests": [
+      "カフェ",
+      "ショッピング",
+      "美容"
+    ],
     "writingStyle": "短文でテンポよく、明るい印象",
-    "postsPerDay": 5,
+    "postsPerDay": 3,
     "active": true,
-    "loginUrl": "",
-    "loginId": "",
-    "loginPassword": "",
+    "loginUrl": "https://spgirl.cityheaven.net/",
+    "loginId": "63986113",
+    "loginPassword": "0000",
     "diaryUrl": "",
-    "miteneUrl": ""
+    "miteneUrl": "",
+    "diaryPageUrl": "https://www.cityheaven.net/osaka/A2702/A270202/level1/girlid-63986113/diary/#menus",
+    "sampleDiaries": "",
+    "postType": "diary",
+    "visibility": "public"
   }
 ]

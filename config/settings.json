@@ -1,8 +1,11 @@
 {
   "minChars": 450,
   "maxChars": 1000,
-  "postingEnabled": false,
   "schedule": "0 */3 8-23 * * *",
+  "postingEnabled": true,
+  "postType": "diary",
+  "visibility": "public",
   "miteneMaxSends": 10,
-  "miteneMinWeeks": 2
+  "miteneMinWeeks": 2,
+  "geminiApiKey": "AIzaSyCz60Pwf7Gzzk9WareJXDSl5kPWV6Ab91I"
 }
