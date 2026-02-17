@@ -1,7 +1,6 @@
 const App = {
   currentAccountId: null,
   diaryRefreshTimer: null,
-  miteneRefreshTimer: null,
 
   // === 初期化 ===
   async init() {
@@ -17,15 +16,13 @@ const App = {
         const page = link.dataset.page;
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('.nav-menu a').forEach(l => l.classList.remove('active'));
         document.getElementById(`page-${page}`).classList.add('active');
         link.classList.add('active');
 
-        // ページ切り替え時に自動更新を停止
         this.stopDiaryRefresh();
-        this.stopMiteneRefresh();
 
         if (page === 'diary') this.loadDiary();
-        if (page === 'mitene') this.loadMitene();
         if (page === 'settings') this.loadSettings();
       });
     });
@@ -45,7 +42,6 @@ const App = {
   async loadDiary() {
     await this.updateDiaryPanel();
 
-    // アカウント一覧
     const accounts = await this.api('/accounts');
     const el = document.getElementById('diary-accounts-list');
 
@@ -69,7 +65,6 @@ const App = {
       `).join('');
     }
 
-    // 写メ日記の投稿履歴
     const posts = await this.api('/posts?limit=200');
     const diaryPosts = posts.filter(p => p.postType !== 'mitene');
     const historyEl = document.getElementById('diary-history');
@@ -79,7 +74,6 @@ const App = {
       historyEl.innerHTML = this.renderPostsTable(diaryPosts);
     }
 
-    // 5秒ごとに自動更新
     this.startDiaryRefresh();
   },
 
@@ -103,13 +97,11 @@ const App = {
 
   async updateDiaryPanel() {
     const stats = await this.api('/stats');
-    // 今日の投稿からミテネを除外して写メ日記のみカウント
     const todayAll = await this.api('/posts/today');
     const diaryToday = todayAll.filter(p => p.postType !== 'mitene');
     const diarySuccess = diaryToday.filter(p => p.status === 'success').length;
     const diaryFailed = diaryToday.filter(p => p.status === 'failed').length;
 
-    // ステータスパネル
     const icon = document.getElementById('diary-live-icon');
     const liveStatus = document.getElementById('diary-live-status');
     const lastRun = document.getElementById('diary-last-run');
@@ -143,7 +135,6 @@ const App = {
       todayResult.textContent = `${diarySuccess} / ${diaryFailed}`;
     }
 
-    // スケジューラーボタン更新
     const badge = document.getElementById('diary-scheduler-status');
     const btn = document.getElementById('btn-diary-scheduler');
     if (badge && btn) {
@@ -197,296 +188,13 @@ const App = {
       alert('投稿処理完了');
     }
 
-    // 履歴を更新
-    if (document.getElementById('page-diary').classList.contains('active')) {
-      const posts = await this.api('/posts?limit=200');
-      const diaryPosts = posts.filter(p => p.postType !== 'mitene');
-      const historyEl = document.getElementById('diary-history');
-      if (diaryPosts.length > 0) {
-        historyEl.innerHTML = this.renderPostsTable(diaryPosts);
-      }
-      await this.updateDiaryPanel();
-    }
-  },
-
-  // =============================================
-  // === ミテネページ（完全に別管理）===
-  // =============================================
-  async loadMitene() {
-    // ミテネ専用アカウント一覧
-    const accounts = await this.api('/mitene-accounts');
-    const el = document.getElementById('mitene-accounts-list');
-
-    if (accounts.length === 0) {
-      el.innerHTML = '<div class="loading">ミテネアカウントがありません。「+ 追加」から女の子を追加してください。</div>';
-    } else {
-      el.innerHTML = `<div class="mitene-accounts-grid">${accounts.map(a => `
-        <div class="mitene-account-row">
-          <input type="checkbox" class="mitene-select-cb" value="${a.id}" style="margin-right:8px; cursor:pointer;">
-          <span class="mitene-account-name">${this.esc(a.name)}</span>
-          <span class="mitene-account-info">
-            ${a.loginId ? 'ID設定済' : '<span class="text-danger">ID未設定</span>'}
-            / 予約: 毎日 ${this.esc(a.schedule || '未設定')}
-          </span>
-          <span class="mitene-account-status" id="mitene-acc-status-${a.id}"></span>
-          <button class="btn btn-sm btn-mitene" id="mitene-btn-${a.id}" onclick="App.miteneSingle('${a.id}')">今すぐ送信</button>
-          <button class="btn btn-sm btn-secondary" onclick="App.editMiteneAccount('${a.id}')">編集</button>
-          <button class="btn btn-sm btn-danger" onclick="App.deleteMiteneAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
-        </div>
-      `).join('')}</div>`;
-    }
-
-    // ステータスパネル更新
-    await this.updateMitenePanel();
-
-    // ミテネ送信履歴
     const posts = await this.api('/posts?limit=200');
-    const mitenePosts = posts.filter(p => p.postType === 'mitene');
-    const historyEl = document.getElementById('mitene-history');
-    if (mitenePosts.length === 0) {
-      historyEl.innerHTML = '<div class="loading">ミテネ送信履歴がありません</div>';
-    } else {
-      this.renderMiteneHistory(historyEl, mitenePosts);
+    const diaryPosts = posts.filter(p => p.postType !== 'mitene');
+    const historyEl = document.getElementById('diary-history');
+    if (diaryPosts.length > 0) {
+      historyEl.innerHTML = this.renderPostsTable(diaryPosts);
     }
-
-    // 5秒ごとに自動更新
-    this.startMiteneRefresh();
-  },
-
-  startMiteneRefresh() {
-    this.stopMiteneRefresh();
-    this.miteneRefreshTimer = setInterval(async () => {
-      if (!document.getElementById('page-mitene').classList.contains('active')) {
-        this.stopMiteneRefresh();
-        return;
-      }
-      await this.updateMitenePanel();
-    }, 5000);
-  },
-
-  stopMiteneRefresh() {
-    if (this.miteneRefreshTimer) {
-      clearInterval(this.miteneRefreshTimer);
-      this.miteneRefreshTimer = null;
-    }
-  },
-
-  async updateMitenePanel() {
-    const status = await this.api('/mitene/status');
-    const posts = await this.api('/posts/today');
-    const miteneToday = posts.filter(p => p.postType === 'mitene');
-    const successToday = miteneToday.filter(p => p.status === 'success').length;
-    const failedToday = miteneToday.filter(p => p.status === 'failed').length;
-
-    // ステータスパネル
-    const icon = document.getElementById('mitene-live-icon');
-    const liveStatus = document.getElementById('mitene-live-status');
-    const todayCount = document.getElementById('mitene-today-count');
-
-    // いずれかのアカウントが実行中か確認
-    const anyRunning = status.accounts && Object.values(status.accounts).some(a => a.isRunning);
-
-    if (icon && liveStatus) {
-      if (anyRunning) {
-        icon.className = 'status-panel-icon mitene-color active pulse';
-        liveStatus.textContent = '送信中...';
-      } else if (status.running) {
-        icon.className = 'status-panel-icon mitene-color active';
-        liveStatus.textContent = '自動実行中';
-      } else {
-        icon.className = 'status-panel-icon mitene-color';
-        liveStatus.textContent = '停止中';
-      }
-    }
-
-    if (todayCount) {
-      todayCount.textContent = `${successToday} 回成功 / ${failedToday} 回失敗`;
-    }
-
-    // スケジューラーボタン更新
-    const badge = document.getElementById('mitene-scheduler-status');
-    const btn = document.getElementById('btn-mitene-scheduler');
-    if (badge && btn) {
-      if (status.running) {
-        badge.textContent = '稼働中';
-        badge.className = 'status-badge running';
-        btn.textContent = 'スケジューラー停止';
-      } else {
-        badge.textContent = '停止中';
-        badge.className = 'status-badge';
-        btn.textContent = 'スケジューラー開始';
-      }
-    }
-  },
-
-  renderMiteneHistory(el, posts) {
-    const statusLabel = { success: '成功', failed: '失敗' };
-    let html = `<table class="posts-table">
-      <thead><tr>
-        <th>日時</th><th>アカウント</th><th>結果</th><th>詳細</th>
-      </tr></thead><tbody>`;
-
-    for (const p of posts) {
-      const time = new Date(p.timestamp).toLocaleString('ja-JP');
-      html += `<tr>
-        <td>${time}</td>
-        <td>${this.esc(p.accountName || p.accountId)}</td>
-        <td class="status-${p.status}">${statusLabel[p.status] || p.status}</td>
-        <td>${this.esc(p.message || '-')}</td>
-      </tr>`;
-    }
-
-    html += '</tbody></table>';
-    el.innerHTML = html;
-  },
-
-  async miteneAll() {
-    if (!confirm('全アカウントでミテネを送信しますか？')) return;
-    await this.api('/mitene/all', 'POST');
-    setTimeout(() => this.updateMitenePanel(), 1000);
-  },
-
-  async miteneSingle(accountId) {
-    if (!confirm('このアカウントで今すぐミテネを送信しますか？')) return;
-
-    const btn = document.getElementById(`mitene-btn-${accountId}`);
-    const statusEl = document.getElementById(`mitene-acc-status-${accountId}`);
-    if (btn) { btn.disabled = true; btn.textContent = '送信中...'; }
-    if (statusEl) { statusEl.textContent = '処理中...'; statusEl.className = 'mitene-account-status sending'; }
-
-    const result = await this.api(`/mitene/send/${accountId}`, 'POST');
-
-    if (btn) { btn.disabled = false; btn.textContent = '今すぐ送信'; }
-
-    if (result.error) {
-      if (statusEl) { statusEl.textContent = '失敗'; statusEl.className = 'mitene-account-status failed'; }
-      alert(`エラー: ${result.error}`);
-    } else if (result.success) {
-      if (statusEl) { statusEl.textContent = '成功!'; statusEl.className = 'mitene-account-status success'; }
-      alert(`ミテネ送信完了`);
-    } else {
-      if (statusEl) { statusEl.textContent = '失敗'; statusEl.className = 'mitene-account-status failed'; }
-      alert(`ミテネ送信失敗: ${result.error || '不明なエラー'}`);
-    }
-
-    // 履歴を更新
-    if (document.getElementById('page-mitene').classList.contains('active')) {
-      const posts = await this.api('/posts?limit=200');
-      const mitenePosts = posts.filter(p => p.postType === 'mitene');
-      const historyEl = document.getElementById('mitene-history');
-      if (mitenePosts.length > 0) {
-        this.renderMiteneHistory(historyEl, mitenePosts);
-      }
-      await this.updateMitenePanel();
-    }
-  },
-
-  async toggleMiteneScheduler() {
-    const status = await this.api('/mitene/status');
-    if (status.running) {
-      await this.api('/mitene/scheduler/stop', 'POST');
-    } else {
-      await this.api('/mitene/scheduler/start', 'POST');
-    }
-    await this.updateMitenePanel();
-  },
-
-  // === ミテネ 全選択・ランダム送信 ===
-
-  toggleMiteneSelectAll() {
-    const checked = document.getElementById('mitene-select-all').checked;
-    document.querySelectorAll('.mitene-select-cb').forEach(cb => cb.checked = checked);
-  },
-
-  miteneRandomSelect() {
-    const all = [...document.querySelectorAll('.mitene-select-cb')];
-    const count = parseInt(document.getElementById('mitene-random-count').value) || 1;
-    // まず全部外す
-    all.forEach(cb => cb.checked = false);
-    document.getElementById('mitene-select-all').checked = false;
-    // シャッフルしてN人選択
-    const shuffled = [...all].sort(() => Math.random() - 0.5);
-    const pick = Math.min(count, shuffled.length);
-    for (let i = 0; i < pick; i++) shuffled[i].checked = true;
-  },
-
-  async miteneRandomSend() {
-    const selected = [...document.querySelectorAll('.mitene-select-cb:checked')].map(cb => cb.value);
-    if (selected.length === 0) { alert('送信する子を選択してください'); return; }
-
-    const from = document.getElementById('mitene-random-from').value;
-    const to = document.getElementById('mitene-random-to').value;
-    if (!from || !to) { alert('時間帯を設定してください'); return; }
-
-    if (!confirm(`${selected.length}人を ${from}〜${to} の間でランダムに送信します。よろしいですか？`)) return;
-
-    const result = await this.api('/mitene/random-send', 'POST', { accountIds: selected, from, to });
-    if (result.error) {
-      alert('エラー: ' + result.error);
-    } else {
-      const times = result.scheduledTimes || [];
-      const list = times.map(t => `  ${t.name}: ${t.time}`).join('\n');
-      document.getElementById('mitene-random-status').textContent = `${selected.length}人のランダム送信を予約しました`;
-      alert(`ランダム送信を予約しました:\n\n${list}\n\nサーバーを起動したままにしてください。`);
-    }
-  },
-
-  // === ミテネアカウント管理 ===
-
-  showAddMiteneAccount() {
-    document.getElementById('modal-mitene-title').textContent = 'ミテネアカウント追加';
-    document.getElementById('mitene-acc-id').value = '';
-    document.getElementById('form-mitene-account').reset();
-    document.getElementById('mitene-acc-schedule').value = '10:00';
-    document.getElementById('modal-mitene-account').style.display = 'flex';
-  },
-
-  async editMiteneAccount(id) {
-    const accounts = await this.api('/mitene-accounts');
-    const a = accounts.find(acc => acc.id === id);
-    if (!a) return;
-
-    document.getElementById('modal-mitene-title').textContent = `${a.name} の編集`;
-    document.getElementById('mitene-acc-id').value = a.id;
-    document.getElementById('mitene-acc-name').value = a.name;
-    document.getElementById('mitene-acc-loginUrl').value = a.loginUrl || '';
-    document.getElementById('mitene-acc-loginId').value = a.loginId || '';
-    document.getElementById('mitene-acc-loginPassword').value = '';
-    document.getElementById('mitene-acc-loginPassword').placeholder = a.loginPassword === '***' ? '設定済み' : 'パスワード';
-    document.getElementById('mitene-acc-schedule').value = a.schedule || '10:00';
-    document.getElementById('modal-mitene-account').style.display = 'flex';
-  },
-
-  async saveMiteneAccount(e) {
-    e.preventDefault();
-    try {
-      const id = document.getElementById('mitene-acc-id').value;
-      const data = {
-        name: document.getElementById('mitene-acc-name').value,
-        loginUrl: document.getElementById('mitene-acc-loginUrl').value,
-        loginId: document.getElementById('mitene-acc-loginId').value,
-        loginPassword: document.getElementById('mitene-acc-loginPassword').value || '***',
-        schedule: document.getElementById('mitene-acc-schedule').value,
-        active: true
-      };
-
-      const result = id
-        ? await this.api(`/mitene-accounts/${id}`, 'PUT', data)
-        : await this.api('/mitene-accounts', 'POST', data);
-
-      if (result.error) { alert(result.error); return; }
-
-      this.closeModal('modal-mitene-account');
-      this.loadMitene();
-    } catch (err) {
-      alert('保存エラー: ' + err.message);
-    }
-  },
-
-  async deleteMiteneAccount(id, name) {
-    if (!confirm(`「${name}」をミテネアカウントから削除しますか？`)) return;
-    await this.api(`/mitene-accounts/${id}`, 'DELETE');
-    this.loadMitene();
+    await this.updateDiaryPanel();
   },
 
   // =============================================
@@ -514,7 +222,6 @@ const App = {
       if (result.error) {
         alert(`取得失敗: ${result.error}`);
       } else {
-        // サンプルをテキストエリアに表示
         const text = result.entries.map(e => `【${e.title}】\n${e.body}`).join('\n\n');
         document.getElementById('acc-sampleDiaries').value = text;
         document.getElementById('acc-sample-count').textContent = `${result.entries.length}件の日記を取得しました`;
@@ -549,7 +256,6 @@ const App = {
     document.getElementById('acc-sampleDiaries').value = a.sampleDiaries || '';
     document.getElementById('acc-postType').value = a.postType || 'diary';
     document.getElementById('acc-visibility').value = a.visibility || 'public';
-    // サンプル数表示
     const sampleText = a.sampleDiaries || '';
     const sampleCount = sampleText ? sampleText.split(/\n\s*\n/).filter(s => s.trim().length > 20).length : 0;
     document.getElementById('acc-sample-count').textContent = sampleCount > 0 ? `${sampleCount}件のサンプル日記あり` : '';
@@ -652,26 +358,20 @@ const App = {
 
   async loadSettings() {
     const settings = await this.api('/settings');
-    // AIプロバイダー
     document.getElementById('set-aiProvider').value = settings.aiProvider || 'gemini';
     this.toggleAIProvider();
-    // Gemini
     document.getElementById('set-geminiApiKey').value = '';
     document.getElementById('set-geminiApiKey').placeholder = settings.geminiApiKey ? '設定済み（変更する場合のみ入力）' : 'Gemini APIキーを入力';
     document.getElementById('set-geminiModel').value = settings.geminiModel || 'gemini-2.0-flash';
-    // OpenAI
     document.getElementById('set-openaiApiKey').value = '';
     document.getElementById('set-openaiApiKey').placeholder = settings.openaiApiKey ? '設定済み（変更する場合のみ入力）' : 'sk-...';
     document.getElementById('set-openaiModel').value = settings.openaiModel || 'gpt-4o-mini';
-    // 共通設定
     document.getElementById('set-minChars').value = settings.minChars || 450;
     document.getElementById('set-maxChars').value = settings.maxChars || 1000;
     document.getElementById('set-schedule').value = settings.schedule || '0 */3 8-23 * * *';
     document.getElementById('set-postingEnabled').checked = settings.postingEnabled || false;
     document.getElementById('set-postType').value = settings.postType || 'diary';
     document.getElementById('set-visibility').value = settings.visibility || 'public';
-    document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 10;
-    document.getElementById('set-miteneMinWeeks').value = settings.miteneMinWeeks || 0;
   },
 
   async saveSettings(e) {
@@ -683,15 +383,11 @@ const App = {
       schedule: document.getElementById('set-schedule').value,
       postingEnabled: document.getElementById('set-postingEnabled').checked,
       postType: document.getElementById('set-postType').value,
-      visibility: document.getElementById('set-visibility').value,
-      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 10,
-      miteneMinWeeks: parseInt(document.getElementById('set-miteneMinWeeks').value) || 0
+      visibility: document.getElementById('set-visibility').value
     };
-    // Gemini APIキーが入力されてる場合のみ保存
     const geminiKey = document.getElementById('set-geminiApiKey').value.trim();
     if (geminiKey) data.geminiApiKey = geminiKey;
     data.geminiModel = document.getElementById('set-geminiModel').value;
-    // OpenAI APIキーが入力されてる場合のみ保存
     const openaiKey = document.getElementById('set-openaiApiKey').value.trim();
     if (openaiKey) data.openaiApiKey = openaiKey;
     data.openaiModel = document.getElementById('set-openaiModel').value;
@@ -702,13 +398,13 @@ const App = {
   // =============================================
   // === 共通ユーティリティ ===
   // =============================================
-  renderPostsTable(posts, showBody = false) {
+  renderPostsTable(posts) {
     if (!posts || posts.length === 0) {
       return '<div class="loading">投稿がありません</div>';
     }
 
     const statusLabel = { success: '成功', failed: '失敗', test: 'テスト' };
-    const typeLabel = { diary: '写メ日記', freepost: 'フリーポスト', mitene: 'ミテネ' };
+    const typeLabel = { diary: '写メ日記', freepost: 'フリーポスト' };
     const visLabel = { public: '全公開', mygirl: 'マイガール' };
 
     let html = `<table class="posts-table">
@@ -727,9 +423,6 @@ const App = {
         <td>${visLabel[p.visibility] || '-'}</td>
         <td class="status-${p.status}">${statusLabel[p.status] || p.status}</td>
       </tr>`;
-      if (showBody && p.body) {
-        html += `<tr><td colspan="7"><div class="post-preview">${this.esc(p.body)}</div></td></tr>`;
-      }
     }
 
     html += '</tbody></table>';
