@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const gitSync = require('./git-sync');
 
 const DB_DIR = path.join(__dirname, '../../data/db');
 const POSTS_FILE = path.join(DB_DIR, 'posts.json');
@@ -58,6 +59,7 @@ class Database {
     };
     posts.push(entry);
     this._writeJson(POSTS_FILE, posts);
+    gitSync.push('投稿履歴更新').catch(() => {});
     return entry;
   }
 
