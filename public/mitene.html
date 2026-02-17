@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEAVEN - ミテネ</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- サイドバー -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h1>HEAVEN</h1>
+        <p>自動化システム</p>
+      </div>
+      <ul class="nav-menu">
+        <li class="nav-section">メイン</li>
+        <li><a href="/">写メ日記</a></li>
+        <li><a href="/mitene" class="active">ミテネ</a></li>
+        <li class="nav-section">管理</li>
+        <li><a href="#" data-page="settings">設定</a></li>
+      </ul>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="content">
+
+      <!-- ===== ミテネページ ===== -->
+      <div id="page-mitene" class="page active">
+        <h2>ミテネ（旧キテネ）自動送信</h2>
+
+        <!-- ステータスパネル -->
+        <div class="status-panel">
+          <div class="status-panel-item">
+            <div class="status-panel-icon mitene-color" id="mitene-live-icon">&#9679;</div>
+            <div>
+              <div class="status-panel-label">スケジューラー</div>
+              <div class="status-panel-value" id="mitene-live-status">停止中</div>
+            </div>
+          </div>
+          <div class="status-panel-item">
+            <div>
+              <div class="status-panel-label">今日のミテネ</div>
+              <div class="status-panel-value" id="mitene-today-count">0 回</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作ボタン -->
+        <div class="action-bar">
+          <button class="btn btn-mitene btn-lg" onclick="App.miteneAll()">今すぐ全員送信</button>
+          <button class="btn btn-secondary" id="btn-mitene-scheduler" onclick="App.toggleMiteneScheduler()">スケジューラー開始</button>
+          <span id="mitene-scheduler-status" class="status-badge">停止中</span>
+        </div>
+
+        <!-- ランダム送信 -->
+        <div class="card">
+          <h3>ランダム送信</h3>
+          <div class="form-grid" style="margin-bottom:12px;">
+            <div class="form-group">
+              <label>開始時刻</label>
+              <input type="time" id="mitene-random-from" value="10:00">
+            </div>
+            <div class="form-group">
+              <label>終了時刻（翌日可）</label>
+              <input type="time" id="mitene-random-to" value="09:00">
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn btn-mitene" onclick="App.miteneRandomSend()">選択した子をランダム送信</button>
+            <span id="mitene-random-status" style="font-size:13px; color:#888;"></span>
+          </div>
+          <small style="display:block; margin-top:8px;">チェックした子が、指定した時間帯の中でランダムな時刻に自動送信されます</small>
+        </div>
+
+        <!-- アカウント管理（ミテネ専用） -->
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <h3 style="margin-bottom:0;">ミテネ アカウント</h3>
+              <label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="mitene-select-all" onchange="App.toggleMiteneSelectAll()"> 全選択</label>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <input type="number" id="mitene-random-count" min="1" value="3" style="width:50px; padding:2px 6px; font-size:13px;">
+                <button class="btn btn-sm btn-secondary" onclick="App.miteneRandomSelect()">人ランダム選択</button>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-mitene" onclick="App.showAddMiteneAccount()">+ 追加</button>
+          </div>
+          <div id="mitene-accounts-list">読み込み中...</div>
+        </div>
+
+        <!-- 使い方ガイド -->
+        <div class="card mitene-guide">
+          <h3>使い方</h3>
+          <div class="guide-steps">
+            <div class="guide-step">
+              <span class="guide-num">1</span>
+              <div>
+                <strong>アカウント追加</strong>
+                <p>上の「+ 追加」で女の子のログイン情報と送信時刻を設定</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">2</span>
+              <div>
+                <strong>今すぐ実行</strong>
+                <p>アカウント横の「今すぐ送信」で即実行。自動でログイン→10件送信</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="guide-num">3</span>
+              <div>
+                <strong>時間指定で自動化</strong>
+                <p>「スケジューラー開始」で各アカウントの設定時刻に毎日自動送信</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 送信履歴 -->
+        <div class="card">
+          <h3>ミテネ送信履歴</h3>
+          <div id="mitene-history">読み込み中...</div>
+        </div>
+      </div>
+
+      <!-- ミテネアカウント編集モーダル -->
+      <div id="modal-mitene-account" class="modal" style="display:none;">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="modal-mitene-title">ミテネアカウント追加</h3>
+            <button class="btn-close" onclick="App.closeModal('modal-mitene-account')">&times;</button>
+          </div>
+          <form id="form-mitene-account" onsubmit="App.saveMiteneAccount(event)">
+            <input type="hidden" id="mitene-acc-id">
+
+            <div class="form-group">
+              <label>名前（女の子の名前）</label>
+              <input type="text" id="mitene-acc-name" required placeholder="りな">
+            </div>
+
+            <hr>
+            <h4>姫デコ ログイン情報</h4>
+
+            <div class="form-group">
+              <label>ログインURL</label>
+              <input type="text" id="mitene-acc-loginUrl" value="https://spgirl.cityheaven.net/">
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>ログインID</label>
+                <input type="text" id="mitene-acc-loginId">
+              </div>
+              <div class="form-group">
+                <label>パスワード</label>
+                <input type="password" id="mitene-acc-loginPassword">
+              </div>
+            </div>
+
+            <hr>
+            <h4>スケジュール</h4>
+
+            <div class="form-group">
+              <label>毎日の送信時刻</label>
+              <input type="time" id="mitene-acc-schedule" value="10:00">
+              <small>スケジューラーON時、この時刻に自動でミテネを10件送信します</small>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-mitene">保存</button>
+              <button type="button" class="btn btn-secondary" onclick="App.closeModal('modal-mitene-account')">キャンセル</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ===== ミテネ設定ページ ===== -->
+      <div id="page-settings" class="page">
+        <h2>ミテネ 設定</h2>
+
+        <form id="form-settings" onsubmit="App.saveSettings(event)">
+          <div class="card">
+            <h3>ミテネ 設定</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>1回の最大送信数</label>
+                <input type="number" id="set-miteneMaxSends" value="10" min="1" max="10">
+                <small>1回の実行で送る最大人数（上限10）</small>
+              </div>
+              <div class="form-group">
+                <label>送付済みスキップ（週間）</label>
+                <input type="number" id="set-miteneMinWeeks" value="0" min="0">
+                <small>0 = 制限なし / 例: 2 = 2週間以内に送った人はスキップ</small>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-mitene">設定を保存</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/mitene-app.js"></script>
+</body>
+</html>
