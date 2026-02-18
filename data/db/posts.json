@@ -511,5 +511,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "全タブ確認済み・全員2週間以内に送信済みのためスキップ（130人）"
+  },
+  {
+    "id": "1771418002033",
+    "date": "2026-02-18",
+    "timestamp": "2026-02-18T12:33:22.033Z",
+    "accountId": "mitene_1770751444616",
+    "accountName": "いちご",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "全タブ確認済み・全員2週間以内に送信済みのためスキップ（30人）"
   }
 ]
