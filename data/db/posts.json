@@ -679,5 +679,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "本日分のミテネは使い切り済み"
+  },
+  {
+    "id": "1771435116484",
+    "date": "2026-02-18",
+    "timestamp": "2026-02-18T17:18:36.484Z",
+    "accountId": "mitene_1770957758610",
+    "accountName": "れいな",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "全タブ確認済み・全員2週間以内に送信済みのためスキップ（148人）"
   }
 ]
