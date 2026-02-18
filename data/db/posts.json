@@ -707,5 +707,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "本日分のミテネは使い切り済み"
+  },
+  {
+    "id": "1771435843747",
+    "date": "2026-02-18",
+    "timestamp": "2026-02-18T17:30:43.747Z",
+    "accountId": "mitene_1770957652292",
+    "accountName": "りぼん",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "本日分のミテネは使い切り済み"
   }
 ]
