@@ -52,7 +52,7 @@ app.get('*', (req, res) => {
 
 // ポート競合を解決してからサーバー起動
 function startServer() {
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('');
     console.log('═══════════════════════════════════════════');
     console.log('  HEAVEN - 自動化システム');

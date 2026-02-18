@@ -1,10 +1,17 @@
 const { execFile } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '../../');
 
+// gitリポジトリが存在するか確認
+function isGitRepo() {
+  return fs.existsSync(path.join(ROOT, '.git'));
+}
+
 // クラウド環境の場合、GitHubトークンでリモートURLを設定
 async function setupCloudGit() {
+  if (!isGitRepo()) return;
   const token = process.env.GIT_TOKEN;
   const repo = process.env.GIT_REPO; // 例: username/HEAVEN
   if (!token || !repo) return;
@@ -33,6 +40,10 @@ function run(args) {
 module.exports = {
   // サーバー起動時に最新を取得
   async pull() {
+    if (!isGitRepo()) {
+      console.log('ℹ️  gitリポジトリなし（Docker環境）- 同期スキップ');
+      return;
+    }
     console.log('🔄 設定データを同期中...');
     await setupCloudGit();
     const result = await run(['pull', '--rebase', '--autostash']);
@@ -44,6 +55,8 @@ module.exports = {
   // config変更後に自動コミット＆プッシュ
   // 他のPCの変更も取り込んでからpushする
   async push(message) {
+    if (!isGitRepo()) return;
+
     await run(['add', 'config/']);
     await run(['add', 'data/db/']);
     const status = await run(['status', '--porcelain', 'config/', 'data/db/']);
