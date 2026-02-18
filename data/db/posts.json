@@ -553,5 +553,19 @@
     "postType": "mitene",
     "status": "failed",
     "message": "ログイン失敗"
+  },
+  {
+    "id": "1771423733664",
+    "date": "2026-02-18",
+    "timestamp": "2026-02-18T14:08:53.664Z",
+    "accountId": "mitene_1770957556713",
+    "accountName": "ちょこ",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "本日分のミテネは使い切り済み"
   }
 ]
