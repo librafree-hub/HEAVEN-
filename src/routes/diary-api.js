@@ -211,8 +211,9 @@ router.get('/settings', (req, res) => {
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
       const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
-      if (settings.geminiApiKey) settings.geminiApiKey = '***';
-      if (settings.openaiApiKey) settings.openaiApiKey = '***';
+      // APIキーは.envから読み取り、設定済みかどうかだけ返す
+      settings.geminiApiKey = process.env.GEMINI_API_KEY ? '***' : '';
+      settings.openaiApiKey = process.env.OPENAI_API_KEY ? '***' : '';
       res.json(settings);
     } else {
       res.json({
@@ -229,20 +230,28 @@ router.get('/settings', (req, res) => {
 router.put('/settings', (req, res) => {
   const dir = path.dirname(SETTINGS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  let existing = {};
-  try {
-    if (fs.existsSync(SETTINGS_PATH)) existing = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
-  } catch (e) { /* 無視 */ }
-  if (req.body.geminiApiKey) {
-    // 新しいキーが入力された
-  } else if (existing.geminiApiKey) {
-    req.body.geminiApiKey = existing.geminiApiKey;
+
+  // APIキーは.envファイルに保存（GitHubに漏れないようにする）
+  const envPath = path.join(__dirname, '../../.env');
+  let envContent = '';
+  try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch (e) { /* 新規 */ }
+
+  if (req.body.geminiApiKey && req.body.geminiApiKey !== '***') {
+    envContent = envContent.replace(/^GEMINI_API_KEY=.*$/m, '').trim();
+    envContent += `\nGEMINI_API_KEY=${req.body.geminiApiKey}`;
+    process.env.GEMINI_API_KEY = req.body.geminiApiKey;
   }
-  if (req.body.openaiApiKey) {
-    // 新しいキーが入力された
-  } else if (existing.openaiApiKey) {
-    req.body.openaiApiKey = existing.openaiApiKey;
+  if (req.body.openaiApiKey && req.body.openaiApiKey !== '***') {
+    envContent = envContent.replace(/^OPENAI_API_KEY=.*$/m, '').trim();
+    envContent += `\nOPENAI_API_KEY=${req.body.openaiApiKey}`;
+    process.env.OPENAI_API_KEY = req.body.openaiApiKey;
   }
+  fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
+
+  // settings.jsonにはAPIキーを保存しない
+  delete req.body.geminiApiKey;
+  delete req.body.openaiApiKey;
+
   try {
     const ai = require('../services/ai-generator');
     ai._geminiModels = {};

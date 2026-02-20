@@ -6,6 +6,5 @@
   "postType": "diary",
   "visibility": "public",
   "miteneMaxSends": 10,
-  "miteneMinWeeks": 2,
-  "geminiApiKey": "AIzaSyCz60Pwf7Gzzk9WareJXDSl5kPWV6Ab91I"
+  "miteneMinWeeks": 2
 }
