@@ -930,5 +930,19 @@
     "image": "",
     "status": "failed",
     "message": "AI生成失敗:\n[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent: [403 Forbidden] Your API key was reported as leaked. Please use another API key.\n[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent: [403 Forbidden] Your API key was reported as leaked. Please use another API key.\n[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent: [403 Forbidden] Your API key was reported as leaked. Please use another API key.\n\n時間を置くか、APIキーの設定を確認してください。"
+  },
+  {
+    "id": "1771584800246",
+    "date": "2026-02-20",
+    "timestamp": "2026-02-20T10:53:20.246Z",
+    "accountId": "mitene_1770957623003",
+    "accountName": "まなみ",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信（スキップ47人）"
   }
 ]
