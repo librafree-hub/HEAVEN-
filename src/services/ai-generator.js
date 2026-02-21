@@ -34,8 +34,7 @@ class AIGenerator {
 
   // --- Gemini ---
   _getGeminiApiKey() {
-    const settings = this._loadSettings();
-    const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') {
       throw new Error('Gemini APIキーが設定されていません。設定ページで入力してください。');
     }
@@ -85,8 +84,7 @@ class AIGenerator {
   // --- OpenAI ---
   _getOpenAIClient() {
     if (this._openaiClient) return this._openaiClient;
-    const settings = this._loadSettings();
-    const apiKey = settings.openaiApiKey;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error('OpenAI APIキーが設定されていません。設定ページで入力してください。');
     const OpenAI = require('openai');
     this._openaiClient = new OpenAI({ apiKey });
