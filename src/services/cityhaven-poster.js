@@ -199,8 +199,22 @@ class CityHavenPoster {
         const fileInput = await page.$(SELECTORS.photo);
         if (fileInput) {
           await fileInput.uploadFile(imagePath);
-          console.log(`  📸 画像アップロード完了`);
-          await this._wait(3000);
+          console.log(`  📸 画像アップロード開始`);
+          // アップロード完了を待つ（「アップロード中」テキストが消えるまで最大30秒）
+          for (let i = 0; i < 30; i++) {
+            await this._wait(1000);
+            const stillUploading = await page.evaluate(() => {
+              const els = Array.from(document.querySelectorAll('a, span, div'));
+              return els.some(el => (el.textContent || '').trim() === 'アップロード中');
+            });
+            if (!stillUploading) {
+              console.log(`  📸 画像アップロード完了（${i + 1}秒）`);
+              break;
+            }
+            if (i === 29) {
+              console.log(`  ⚠️ 画像アップロードがタイムアウト（30秒）`);
+            }
+          }
         }
       }
 
@@ -247,194 +261,155 @@ class CityHavenPoster {
     return elements;
   }
 
-  // フォーム送信（リトライ付き）
+  // CityHeaven日記投稿フロー:
+  // 1. 「一時保存＆プレビュー」(#previewsbmt) をクリック → AJAXでプレビュー表示（URL変わらない）
+  // 2. プレビュー画面の右上に「投稿」ボタンが出現
+  // 3. 「投稿」ボタンをクリック → 投稿完了
   async _submitForm(page, diaryUrl) {
-    const MAX_SUBMIT_RETRIES = 2;
 
-    // まず全要素をデバッグ出力（何がページにあるか把握）
-    const allElements = await this._debugPageElements(page);
+    // === STEP 1: 「一時保存＆プレビュー」をクリック ===
+    console.log(`  📤 STEP1: 一時保存＆プレビューをクリック...`);
 
-    for (let attempt = 0; attempt <= MAX_SUBMIT_RETRIES; attempt++) {
-      if (attempt > 0) {
-        console.log(`  🔄 送信リトライ ${attempt}/${MAX_SUBMIT_RETRIES}...`);
-        await this._dismissOverlays(page);
-        await this._wait(2000);
-      }
-
-      console.log(`  📤 送信中...`);
-
-      // 送信ボタンを探してスクロール→クリック
-      const clicked = await page.evaluate(() => {
-        // ★ CityHeaven専用: 「一時保存＆プレビュー」ボタン（id="previewsbmt"）を最優先
-        let target = document.querySelector('#previewsbmt');
-        if (target) {
-          target.scrollIntoView({ block: 'center', behavior: 'instant' });
-          target.click();
-          return `<${target.tagName.toLowerCase()}> "#previewsbmt: ${(target.textContent||'').trim().substring(0, 30)}"`;
-        }
-
-        // 広い範囲でボタンを検索（input[type="image"]も含む）
-        const buttons = Array.from(document.querySelectorAll(
-          'input[type="submit"], button[type="submit"], button, input[type="button"], input[type="image"]'
-        ));
-
-        // 除外キーワード
-        const excludeWords = ['デコメーラー', 'キャンセル', '戻る', '削除', 'タグ追加', 'タグ検索'];
-        const isExcluded = (text) => excludeWords.some(w => text.includes(w));
-
-        // 1. 「確認」「投稿」「送信」「プレビュー」を含むボタンを優先
-        target = buttons.find(b => {
-          const text = (b.value || b.textContent || '').trim();
-          return text.match(/確認|投稿|送信|登録|プレビュー|一時保存/) && !isExcluded(text);
-        });
-
-        // 2. なければ input[type="submit"] か input[type="image"]
-        if (!target) {
-          target = buttons.find(b => {
-            const text = (b.value || b.textContent || '').trim();
-            return (b.type === 'submit' || b.type === 'image') && !isExcluded(text);
-          });
-        }
-
-        // 3. なければ onclick属性を持つボタン的要素
-        if (!target) {
-          const clickables = Array.from(document.querySelectorAll('[onclick]'));
-          target = clickables.find(el => {
-            const text = (el.value || el.textContent || '').trim();
-            return text.match(/確認|投稿|送信|登録|プレビュー|一時保存/) && !isExcluded(text);
-          });
-        }
-
-        // 4. aタグも探す（プレビュー・投稿・確認のテキストを持つもの）
-        if (!target) {
-          const links = Array.from(document.querySelectorAll('a'));
-          target = links.find(a => {
-            const text = (a.textContent || '').trim();
-            const href = a.href || '';
-            return text.match(/確認|投稿する|送信する|プレビュー|一時保存/) && !isExcluded(text)
-              && (href.includes('javascript:') || href === '#' || href.includes('submit'));
-          });
-        }
-
-        if (target) {
-          target.scrollIntoView({ block: 'center', behavior: 'instant' });
-          target.click();
-          const tag = target.tagName.toLowerCase();
-          const text = (target.value || target.textContent || '').trim().substring(0, 30);
-          return `<${tag}> "${text}"`;
-        }
-
-        return false;
-      });
-
-      if (!clicked) {
-        console.log(`  ⚠️ 送信ボタンが見つかりません`);
-        await this._screenshot(page, 'no-submit-btn');
-        continue;
-      }
-      console.log(`  📤 クリック: ${clicked}`);
-
-      // ページ遷移を待つ
-      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => null);
-      await this._wait(3000);
-      await this._screenshot(page, 'after-submit');
-
-      // 遷移後確認
-      const afterUrl = page.url();
-      const afterText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
-      console.log(`  📍 送信後URL: ${afterUrl}`);
-      console.log(`  📄 ページ冒頭: ${afterText.substring(0, 200).replace(/\n/g, ' | ')}`);
-
-      // プレビューボタンはJavaScriptで動くので、ページ遷移ではなくコンテンツ変更の可能性もある
-      // 少し長めに待つ
-      const hasError = afterText.match(/エラー|入力してください|必須/) && !afterText.includes('日記を投稿する');
-
-      // URLが変わった場合 → 確認/プレビュー画面に遷移した
-      if (afterUrl !== diaryUrl && !hasError) {
-        console.log(`  📋 プレビュー/確認画面に遷移`);
-        await this._debugPageElements(page);
-        const confirmResult = await this._handleConfirmPage(page);
-        if (confirmResult !== null) return confirmResult;
-
-        // 確認画面の処理後
-        const resultUrl = page.url();
-        const resultText = await page.evaluate(() => document.body.innerText);
-        if (resultText.includes('完了') || resultText.includes('成功') ||
-            resultText.includes('登録しました') || resultText.includes('投稿しました')) {
-          console.log(`  ✅ 投稿完了（完了メッセージ確認）`);
-          return { success: true };
-        }
-        if (resultUrl !== diaryUrl) {
-          console.log(`  ✅ 投稿完了（ページ遷移確認: ${resultUrl}）`);
-          return { success: true };
-        }
-      }
-
-      // URLが変わってないが、ページ内容が変わった可能性（AJAXプレビュー等）
-      // プレビュー後に「投稿する」系のボタンが出現するかチェック
-      if (afterUrl === diaryUrl) {
-        const postBtnFound = await page.evaluate(() => {
-          // プレビュー後に「投稿する」ボタンが出現するか
-          const allEls = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'));
-          return allEls.find(el => {
-            const text = (el.value || el.textContent || '').trim();
-            return text.match(/投稿する|この内容で投稿|日記を投稿/) && !text.includes('デコメーラー');
-          }) ? true : false;
-        });
-
-        if (postBtnFound) {
-          console.log(`  📋 プレビュー内に「投稿する」ボタン発見 → クリック`);
-          await page.evaluate(() => {
-            const allEls = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"]'));
-            const btn = allEls.find(el => {
-              const text = (el.value || el.textContent || '').trim();
-              return text.match(/投稿する|この内容で投稿|日記を投稿/) && !text.includes('デコメーラー');
-            });
-            if (btn) {
-              btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-              btn.click();
-            }
-          });
-          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => null);
-          await this._wait(3000);
-          await this._screenshot(page, 'after-final-post');
-
-          const finalUrl = page.url();
-          const finalText = await page.evaluate(() => document.body.innerText);
-          console.log(`  📍 最終URL: ${finalUrl}`);
-
-          if (finalText.includes('完了') || finalText.includes('成功') ||
-              finalText.includes('登録しました') || finalText.includes('投稿しました') ||
-              finalUrl !== diaryUrl) {
-            console.log(`  ✅ 投稿完了！`);
-            return { success: true };
-          }
-        }
-      }
-
-      // エラーか送信失敗
-      if (hasError) {
-        console.log(`  ⚠️ エラーメッセージ検出`);
-      } else {
-        console.log(`  ⚠️ 送信失敗の可能性`);
-        // デバッグ: 現在のページ要素を再出力
-        await this._debugPageElements(page);
-      }
-
-      // 失敗 - リトライ
-      if (attempt < MAX_SUBMIT_RETRIES) {
-        console.log(`  ⚠️ リトライします...`);
-        const resultUrl = page.url();
-        if (resultUrl !== diaryUrl) {
-          await page.goto(diaryUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null);
-          await this._wait(2000);
-        }
-      }
+    const previewBtn = await page.$('#previewsbmt');
+    if (!previewBtn) {
+      console.log(`  ❌ #previewsbmt ボタンが見つかりません`);
+      await this._screenshot(page, 'no-preview-btn');
+      return { success: false, error: '#previewsbmt ボタンが見つかりません' };
     }
 
-    // 全リトライ失敗
-    console.log(`  ❌ 投稿失敗（リトライ上限）`);
-    return { success: false, error: `送信ボタンが見つからないか、フォーム送信が失敗しました` };
+    await previewBtn.scrollIntoView();
+    await previewBtn.click();
+    console.log(`  📤 #previewsbmt クリック完了`);
+
+    // AJAXなのでnavigationではなく、ネットワークが落ち着くのを待つ
+    await this._wait(5000);
+
+    // ページ遷移したかチェック（AJAX or ページ遷移、両方に対応）
+    const afterPreviewUrl = page.url();
+    console.log(`  📍 プレビュー後URL: ${afterPreviewUrl}`);
+
+    await this._screenshot(page, 'after-preview');
+
+    // プレビュー後のページ内容を確認
+    const previewText = await page.evaluate(() => document.body.innerText.substring(0, 2000));
+    console.log(`  📄 プレビュー後テキスト(先頭200): ${previewText.substring(0, 200).replace(/\n/g, ' | ')}`);
+
+    // エラーチェック
+    if (previewText.match(/エラー|入力してください|文字以上/) && !previewText.includes('日記を投稿する')) {
+      console.log(`  ❌ バリデーションエラー`);
+      await this._screenshot(page, 'validation-error');
+      return { success: false, error: 'フォームのバリデーションエラー' };
+    }
+
+    // === STEP 2: 「投稿」ボタンを探してクリック ===
+    // ※「確認後右上にある「投稿」ボタンを押して投稿！」とページに書いてある
+    console.log(`  📤 STEP2: 投稿ボタンを探してクリック...`);
+
+    // プレビュー後のページ要素をデバッグ出力
+    await this._debugPageElements(page);
+
+    // 投稿ボタンを探す（mailto/dcmailtoリンクは完全除外）
+    const postClicked = await page.evaluate(() => {
+      const allEls = Array.from(document.querySelectorAll('a, button, input[type="submit"], input[type="button"], input[type="image"]'));
+
+      // mailtoリンクを完全除外
+      const filtered = allEls.filter(el => {
+        const href = (el.href || '').toLowerCase();
+        if (href.includes('mailto:') || href.includes('dcmailto:')) return false;
+        return true;
+      });
+
+      // 除外テキスト
+      const excludeWords = ['デコメーラー', 'キャンセル', '戻る', '削除', 'メール投稿', '標準メール', 'プレビュー', '一時保存', 'タグ'];
+      const isExcluded = (text) => excludeWords.some(w => text.includes(w));
+
+      // 「投稿」ボタンを探す（テキストが短い「投稿」がベスト）
+      let target = null;
+
+      // 1. テキストが「投稿」だけのボタン（最優先）
+      target = filtered.find(el => {
+        const text = (el.value || el.textContent || '').trim();
+        return text === '投稿';
+      });
+
+      // 2. 「投稿する」「この内容で投稿」等
+      if (!target) {
+        target = filtered.find(el => {
+          const text = (el.value || el.textContent || '').trim();
+          return text.match(/^投稿する$|この内容で投稿|日記を投稿$/) && !isExcluded(text);
+        });
+      }
+
+      // 3. 「投稿」を含むボタン（ただし除外ワード以外）
+      if (!target) {
+        target = filtered.find(el => {
+          const text = (el.value || el.textContent || '').trim();
+          return text.includes('投稿') && text.length < 15 && !isExcluded(text);
+        });
+      }
+
+      // 4. submit系ボタン
+      if (!target) {
+        target = filtered.find(el => {
+          const text = (el.value || el.textContent || '').trim();
+          return (el.type === 'submit' || el.type === 'image') && !isExcluded(text);
+        });
+      }
+
+      if (target) {
+        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const tag = target.tagName.toLowerCase();
+        const text = (target.value || target.textContent || '').trim().substring(0, 30);
+        const href = (target.href || '').substring(0, 50);
+        target.click();
+        return `<${tag}> "${text}" href="${href}"`;
+      }
+
+      return false;
+    });
+
+    if (!postClicked) {
+      console.log(`  ⚠️ 投稿ボタンが見つかりません。ページ遷移での確認を試みます...`);
+
+      // URLが変わっていれば確認画面かもしれない
+      if (afterPreviewUrl !== diaryUrl) {
+        const confirmResult = await this._handleConfirmPage(page);
+        if (confirmResult !== null) return confirmResult;
+      }
+
+      await this._screenshot(page, 'no-post-btn');
+      return { success: false, error: '投稿ボタンが見つかりません' };
+    }
+
+    console.log(`  📤 投稿ボタンクリック: ${postClicked}`);
+
+    // 投稿後のページ遷移を待つ
+    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => null);
+    await this._wait(3000);
+    await this._screenshot(page, 'after-post');
+
+    // === STEP 3: 結果判定 ===
+    const finalUrl = page.url();
+    const finalText = await page.evaluate(() => document.body.innerText.substring(0, 2000));
+    console.log(`  📍 投稿後URL: ${finalUrl}`);
+    console.log(`  📄 投稿後テキスト(先頭200): ${finalText.substring(0, 200).replace(/\n/g, ' | ')}`);
+
+    // 完了メッセージがあれば成功
+    if (finalText.includes('完了') || finalText.includes('成功') ||
+        finalText.includes('登録しました') || finalText.includes('投稿しました')) {
+      console.log(`  ✅ 投稿完了（完了メッセージ確認）`);
+      return { success: true };
+    }
+
+    // URLが変わっていれば成功（日記一覧等に遷移）
+    if (finalUrl !== diaryUrl) {
+      console.log(`  ✅ 投稿完了（ページ遷移確認: ${finalUrl}）`);
+      return { success: true };
+    }
+
+    // それでもダメなら失敗
+    console.log(`  ❌ 投稿失敗（URLも内容も変化なし）`);
+    return { success: false, error: '投稿ボタンクリック後もページが変わりません' };
   }
 
   // 確認画面の処理
