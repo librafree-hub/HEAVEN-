@@ -233,35 +233,38 @@ class CityHavenPoster {
 
       // 送信ボタンを探してスクロール→クリック
       const clicked = await page.evaluate(() => {
-        const all = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"], a'));
+        // submitボタンとbuttonのみ（aタグは除外 - デコメーラーリンク等を避ける）
+        const buttons = Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], button, input[type="button"]'));
 
-        // 「投稿」「送信」「デコメーラー」を含む要素を優先
-        let target = all.find(b => {
+        // 1. 「投稿」「送信」を含むsubmit/buttonを優先（デコメーラーは除外）
+        let target = buttons.find(b => {
           const text = (b.value || b.textContent || '').trim();
-          return text.match(/投稿|送信|デコメーラー/) && !text.includes('キャンセル') && !text.includes('戻る');
+          return text.match(/投稿|送信/) && !text.includes('デコメーラー') && !text.includes('キャンセル') && !text.includes('戻る');
         });
 
-        // なければsubmitボタン（キャンセル等除外）
+        // 2. なければsubmitボタン（キャンセル等除外）
         if (!target) {
-          target = all.find(b => {
+          target = buttons.find(b => {
             const text = (b.value || b.textContent || '').trim();
-            return (b.type === 'submit') && !text.includes('キャンセル') && !text.includes('削除') && !text.includes('タグ');
+            return (b.type === 'submit') && !text.includes('キャンセル') && !text.includes('削除') && !text.includes('タグ') && !text.includes('デコメーラー');
           });
         }
 
+        // 3. フォームを直接submitする最終手段
+        if (!target) {
+          const form = document.querySelector('form');
+          if (form) {
+            form.submit();
+            return 'form.submit()';
+          }
+        }
+
         if (target) {
-          // スクロールして表示してからクリック
           target.scrollIntoView({ block: 'center', behavior: 'instant' });
           target.click();
           return (target.value || target.textContent || '').trim().substring(0, 30);
         }
 
-        // フォームを直接submitする最終手段
-        const form = document.querySelector('form');
-        if (form) {
-          form.submit();
-          return 'form.submit()';
-        }
         return false;
       });
 
@@ -295,19 +298,20 @@ class CityHavenPoster {
       const resultUrl = page.url();
       const resultText = await page.evaluate(() => document.body.innerText);
 
-      // 成功パターン
-      if (resultText.includes('完了') || resultText.includes('成功') ||
-          resultText.includes('登録しました') || resultText.includes('投稿しました') ||
-          resultText.includes('日記一覧')) {
-        console.log(`  ✅ 投稿完了`);
-        return { success: true };
-      }
-
       // URL変更＝遷移した＝成功の可能性が高い
       if (resultUrl !== diaryUrl && !hasError) {
+        // 成功キーワード確認
+        if (resultText.includes('完了') || resultText.includes('成功') ||
+            resultText.includes('登録しました') || resultText.includes('投稿しました')) {
+          console.log(`  ✅ 投稿完了（完了メッセージ確認）`);
+          return { success: true };
+        }
         console.log(`  ✅ 投稿完了（ページ遷移確認）`);
         return { success: true };
       }
+
+      // URLが変わってない場合は失敗（ナビメニューの「日記一覧」等に騙されない）
+      console.log(`  ⚠️ URLが変わっていません - 送信失敗の可能性`);
 
       // 失敗 - リトライする
       if (attempt < MAX_SUBMIT_RETRIES) {
