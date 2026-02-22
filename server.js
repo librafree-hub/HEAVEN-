@@ -102,4 +102,7 @@ function startServer() {
 // 起動時に最新データを取得してからサーバー開始
 gitSync.pull().then(() => {
   startServer();
+  // スケジューラーの前回状態を復元（開始中だった場合は自動再開）
+  const scheduler = require('./src/services/scheduler');
+  scheduler.restore();
 });
