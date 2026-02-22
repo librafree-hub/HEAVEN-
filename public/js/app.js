@@ -148,6 +148,63 @@ const App = {
         btn.textContent = 'スケジューラー開始';
       }
     }
+
+    // スケジュール予定パネル
+    const schedPanel = document.getElementById('schedule-panel');
+    if (schedPanel) {
+      if (stats.scheduler?.running && stats.scheduler?.schedule) {
+        schedPanel.style.display = '';
+        document.getElementById('schedule-cron').textContent = stats.scheduler.schedule;
+        document.getElementById('schedule-description').textContent = this.describeCron(stats.scheduler.schedule);
+
+        const nextRuns = stats.scheduler.nextRuns || [];
+        const runsEl = document.getElementById('schedule-next-runs');
+        if (nextRuns.length > 0) {
+          const now = new Date();
+          runsEl.innerHTML = '<div style="display:flex; flex-wrap:wrap; gap:8px;">' +
+            nextRuns.map((r, i) => {
+              const d = new Date(r);
+              const diffMs = d - now;
+              const diffMin = Math.round(diffMs / 60000);
+              const diffH = Math.floor(diffMin / 60);
+              const remMin = diffMin % 60;
+              const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+              const dayStr = d.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+              const untilStr = diffH > 0 ? `${diffH}時間${remMin}分後` : `${diffMin}分後`;
+              const isNext = i === 0;
+              return `<div style="background:${isNext ? '#1a3a1a' : '#2a2a2a'}; border:1px solid ${isNext ? '#4a8' : '#444'}; border-radius:8px; padding:8px 14px; text-align:center; min-width:100px;">
+                <div style="font-size:${isNext ? '18px' : '15px'}; font-weight:bold; color:${isNext ? '#6f6' : '#ccc'};">${timeStr}</div>
+                <div style="font-size:11px; color:#888;">${dayStr}</div>
+                <div style="font-size:11px; color:${isNext ? '#8f8' : '#999'}; margin-top:2px;">${untilStr}</div>
+              </div>`;
+            }).join('') + '</div>';
+        } else {
+          runsEl.innerHTML = '<div style="color:#888;">次回実行予定はありません</div>';
+        }
+      } else {
+        schedPanel.style.display = 'none';
+      }
+    }
+  },
+
+  // cron式を日本語で説明
+  describeCron(expr) {
+    try {
+      const parts = expr.split(' ');
+      if (parts.length < 6) return '';
+      const hourPart = parts[2];
+      let desc = '';
+      if (hourPart.includes('/')) {
+        const [range, step] = hourPart.split('/');
+        if (range.includes('-')) {
+          const [start, end] = range.split('-');
+          desc = `${start}時〜${end}時の間、${step}時間ごと`;
+        } else {
+          desc = `${step}時間ごと`;
+        }
+      }
+      return desc;
+    } catch (e) { return ''; }
   },
 
   // === 写メ日記 スケジューラー ===

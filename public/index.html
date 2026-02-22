@@ -66,6 +66,19 @@
           <span id="diary-scheduler-status" class="status-badge">停止中</span>
         </div>
 
+        <!-- スケジュール予定 -->
+        <div class="card" id="schedule-panel" style="display:none;">
+          <h3>投稿スケジュール</h3>
+          <div style="display:flex; gap:16px; align-items:center; margin-bottom:12px;">
+            <span style="font-size:14px; color:#888;">Cron式:</span>
+            <code id="schedule-cron" style="background:#2a2a2a; padding:4px 8px; border-radius:4px;">-</code>
+            <span id="schedule-description" style="font-size:13px; color:#aaa;"></span>
+          </div>
+          <div id="schedule-next-runs">
+            <div class="loading">読み込み中...</div>
+          </div>
+        </div>
+
         <!-- アカウント管理（写メ日記専用） -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">

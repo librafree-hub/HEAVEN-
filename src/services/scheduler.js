@@ -162,6 +162,7 @@ class Scheduler {
     const settings = this._loadSettings();
     const cronExpression = settings.schedule || '0 */3 8-23 * * *';
     this.stop();
+    this.cronExpression = cronExpression;
     const job = cron.schedule(cronExpression, async () => {
       console.log(`\n⏰ スケジュール実行: ${new Date().toLocaleString('ja-JP')}`);
       await this.runOnce();
@@ -176,11 +177,73 @@ class Scheduler {
     for (const job of this.jobs) job.stop();
     this.jobs = [];
     this.running = false;
+    this.cronExpression = null;
     this._saveState(false);
   }
 
+  // cron式から次回実行時刻のリストを計算
+  _getNextRuns(count = 5) {
+    if (!this.cronExpression || !this.running) return [];
+    try {
+      const interval = cron.getTasks();
+      // node-cronには次回実行取得がないので、手動で計算
+      const expr = this.cronExpression;
+      const parts = expr.split(' ');
+      const now = new Date();
+      const runs = [];
+
+      // 簡易的にcron式をパース（秒 分 時 日 月 曜）
+      const sec = parts[0] || '0';
+      const min = parts[1] || '*';
+      const hourPart = parts[2] || '*';
+
+      // 時間の範囲を解析
+      let hours = [];
+      if (hourPart.includes('/')) {
+        // */3 8-23 のようなパターン
+        const [range, step] = hourPart.split('/');
+        const s = parseInt(step);
+        let start = 0, end = 23;
+        if (range.includes('-')) {
+          [start, end] = range.split('-').map(Number);
+        }
+        for (let h = start; h <= end; h += s) hours.push(h);
+      } else if (hourPart.includes('-')) {
+        const [start, end] = hourPart.split('-').map(Number);
+        for (let h = start; h <= end; h++) hours.push(h);
+      } else if (hourPart === '*') {
+        for (let h = 0; h <= 23; h++) hours.push(h);
+      } else {
+        hours = hourPart.split(',').map(Number);
+      }
+
+      const minute = min === '0' ? 0 : (min === '*' ? 0 : parseInt(min));
+
+      // 今日と明日の実行予定を生成
+      for (let dayOffset = 0; dayOffset <= 1 && runs.length < count; dayOffset++) {
+        for (const h of hours) {
+          const d = new Date(now);
+          d.setDate(d.getDate() + dayOffset);
+          d.setHours(h, minute, 0, 0);
+          if (d > now) {
+            runs.push(d.toISOString());
+            if (runs.length >= count) break;
+          }
+        }
+      }
+      return runs;
+    } catch (e) {
+      return [];
+    }
+  }
+
   getStatus() {
-    return { running: this.running, ...this.status };
+    return {
+      running: this.running,
+      schedule: this.cronExpression || null,
+      nextRuns: this._getNextRuns(5),
+      ...this.status
+    };
   }
 }
 
