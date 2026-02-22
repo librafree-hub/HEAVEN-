@@ -6,11 +6,34 @@ const imageManager = require('./image-manager');
 const aiGenerator = require('./ai-generator');
 const poster = require('./cityhaven-poster');
 
+const STATE_FILE = path.join(__dirname, '../../data/scheduler-state.json');
+
 class Scheduler {
   constructor() {
     this.jobs = [];
     this.running = false;
     this.status = { lastRun: null, nextRun: null, isRunning: false };
+  }
+
+  // 状態をファイルに保存
+  _saveState(running) {
+    try {
+      const dir = path.dirname(STATE_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(STATE_FILE, JSON.stringify({ running }, null, 2));
+    } catch (e) { /* 無視 */ }
+  }
+
+  // 起動時に前回の状態を復元
+  restore() {
+    try {
+      if (!fs.existsSync(STATE_FILE)) return;
+      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+      if (state.running) {
+        console.log(`📅 前回のスケジューラー状態を復元中...`);
+        this.start();
+      }
+    } catch (e) { /* 無視 */ }
   }
 
   _loadAccounts() {
@@ -145,6 +168,7 @@ class Scheduler {
     });
     this.jobs.push(job);
     this.running = true;
+    this._saveState(true);
     console.log(`📅 スケジューラー開始: ${cronExpression}`);
   }
 
@@ -152,6 +176,7 @@ class Scheduler {
     for (const job of this.jobs) job.stop();
     this.jobs = [];
     this.running = false;
+    this._saveState(false);
   }
 
   getStatus() {
