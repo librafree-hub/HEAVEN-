@@ -128,6 +128,12 @@ class CityHavenPoster {
       await this._wait(3000);
       await this._dismissOverlays(page);
 
+      // JavaScriptのconfirm/alertダイアログを自動でOKする
+      page.on('dialog', async (dialog) => {
+        console.log(`  💬 ダイアログ検出: "${dialog.message().substring(0, 50)}..." → OK`);
+        await dialog.accept();
+      });
+
       // === フォームにデータを設定 ===
 
       // 1. 投稿タイプ
