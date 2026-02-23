@@ -1291,5 +1291,19 @@
     "postType": "mitene",
     "status": "failed",
     "message": "ログイン失敗"
+  },
+  {
+    "id": "1771871906904",
+    "date": "2026-02-23",
+    "timestamp": "2026-02-23T18:38:26.904Z",
+    "accountId": "mitene_1770957542570",
+    "accountName": "しほ",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信（スキップ111人）"
   }
 ]
