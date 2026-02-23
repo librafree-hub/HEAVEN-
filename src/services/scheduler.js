@@ -105,11 +105,11 @@ class Scheduler {
         postType: postOptions.postType,
         visibility: postOptions.visibility,
         status: result.success ? 'success' : 'failed',
-        message: result.error || ''
+        message: result.emojiStrategy ? `絵文字: ${result.emojiStrategy}` : (result.error || '')
       });
 
       console.log(result.success
-        ? `  ✅ ${account.name}: 投稿成功`
+        ? `  ✅ ${account.name}: 投稿成功${result.emojiStrategy ? ` (${result.emojiStrategy})` : ''}`
         : `  ❌ ${account.name}: 投稿失敗 - ${result.error}`);
       return result;
     } catch (e) {

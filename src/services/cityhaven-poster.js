@@ -88,6 +88,61 @@ class CityHavenPoster {
     } catch (e) { /* 無視 */ }
   }
 
+  // Unicode絵文字を含むかチェック
+  _hasUnicodeEmojis(text) {
+    return /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}]/u.test(text);
+  }
+
+  // Unicode絵文字を除去
+  _stripUnicodeEmojis(text) {
+    return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+  }
+
+  // Unicode絵文字を安全な記号文字に置換
+  _replaceEmojisWithSafe(text) {
+    const safeChars = ['♪', '♡', '★', '☆', '♥', '○', '●', '◎', '♪', '♡', '★', '☆'];
+    let idx = 0;
+    return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, () => {
+      return safeChars[idx++ % safeChars.length];
+    }).trim();
+  }
+
+  // フォームにタイトル・本文を設定（CKEditor対応）
+  async _fillForm(page, title, body) {
+    // タイトル入力
+    await page.evaluate((sel, text) => {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.focus();
+        el.value = text;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, SELECTORS.title, title);
+
+    // 本文入力（CKEditor対応）
+    const bodySet = await page.evaluate((sel, text) => {
+      if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances) {
+        const editorName = sel.replace('#', '');
+        const editor = CKEDITOR.instances[editorName];
+        if (editor) { editor.setData(text); return 'ckeditor'; }
+        const keys = Object.keys(CKEDITOR.instances);
+        if (keys.length > 0) { CKEDITOR.instances[keys[0]].setData(text); return 'ckeditor-first'; }
+      }
+      const el = document.querySelector(sel);
+      if (el) {
+        el.focus();
+        el.value = text;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return 'textarea';
+      }
+      return 'failed';
+    }, SELECTORS.body, body);
+    console.log(`  ✏️ 本文入力方法: ${bodySet}`);
+    await this._wait(1000);
+  }
+
   // ログイン
   async _login(page, account) {
     const loginUrl = account.loginUrl || 'https://spgirl.cityheaven.net/J1Login.php';
@@ -160,89 +215,17 @@ class CityHavenPoster {
       console.log(`  🔒 公開範囲: ${visibility === 'mygirl' ? 'マイガール限定' : '全公開'}`);
       await this._wait(500);
 
-      // 3. タイトル入力（絵文字を除去）
-      const cleanTitle = diary.title.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, '').trim();
-      await page.waitForSelector(SELECTORS.title, { timeout: 10000 });
-      await page.evaluate((sel, text) => {
-        const el = document.querySelector(sel);
-        if (el) {
-          el.focus();
-          el.value = text;
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }, SELECTORS.title, cleanTitle);
-      console.log(`  ✏️ タイトル: "${cleanTitle}"`);
-
-      // 4. 本文入力（CKEditor対応 + 絵文字除去）
-      const cleanBody = diary.body.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, '').trim();
-      await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-
-      // CKEditorが使われているかチェックし、適切な方法で入力
-      const bodySet = await page.evaluate((sel, text) => {
-        // CKEditor経由で入力（最優先）
-        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances) {
-          const editorName = sel.replace('#', '');
-          const editor = CKEDITOR.instances[editorName];
-          if (editor) {
-            editor.setData(text);
-            return 'ckeditor';
-          }
-          // 名前が違う場合、最初のインスタンスを使う
-          const keys = Object.keys(CKEDITOR.instances);
-          if (keys.length > 0) {
-            CKEDITOR.instances[keys[0]].setData(text);
-            return 'ckeditor-first';
-          }
-        }
-        // CKEditorなしの場合は直接入力
-        const el = document.querySelector(sel);
-        if (el) {
-          el.focus();
-          el.value = text;
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'textarea';
-        }
-        return 'failed';
-      }, SELECTORS.body, cleanBody);
-      console.log(`  ✏️ 本文入力方法: ${bodySet}`);
-      await this._wait(1000);
-
-      // 入力確認（CKEditorの場合はgetDataで確認）
-      const fieldCheck = await page.evaluate((sel) => {
-        const title = document.querySelector('#diaryTitle');
-        let bodyLen = 0;
-        const editorName = sel.replace('#', '');
-        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorName]) {
-          bodyLen = CKEDITOR.instances[editorName].getData().length;
-        } else {
-          const body = document.querySelector(sel);
-          bodyLen = body?.value?.length || 0;
-        }
-        return { titleLen: title?.value?.length || 0, bodyLen };
-      }, SELECTORS.body);
-      console.log(`  ✏️ 本文: ${fieldCheck.bodyLen}文字（タイトル${fieldCheck.titleLen}文字）`);
-
-      if (fieldCheck.bodyLen === 0) {
-        throw new Error('本文の入力に失敗しました（0文字）');
-      }
-
-      // 5. 画像アップロード
+      // 3. 画像アップロード（リトライ前に一度だけ）
       if (imagePath && fs.existsSync(imagePath)) {
         const fileInput = await page.$(SELECTORS.photo);
         if (fileInput) {
           await fileInput.uploadFile(imagePath);
           console.log(`  📸 画像アップロード開始`);
-          // アップロード完了を待つ（最大15秒）
-          // 「アップロード中」テキストが消えるか、サムネイルが表示されるまで待つ
           for (let i = 0; i < 15; i++) {
             await this._wait(1000);
             const uploadStatus = await page.evaluate(() => {
-              // サムネイル画像が表示されたら完了
               const thumbs = document.querySelectorAll('img[src*="thumb"], img[src*="upload"], .preview img, .thumbnail img');
               if (thumbs.length > 0) return 'done';
-              // テキストでチェック
               const pageText = document.body.innerText;
               if (pageText.includes('アップロード中')) return 'uploading';
               return 'unknown';
@@ -252,7 +235,6 @@ class CityHavenPoster {
               break;
             }
             if (uploadStatus !== 'uploading' && i >= 5) {
-              // 5秒以上待ってアップロード中でもないなら完了とみなす
               console.log(`  📸 画像アップロード完了（${i + 1}秒、ステータス: ${uploadStatus}）`);
               break;
             }
@@ -264,11 +246,77 @@ class CityHavenPoster {
       }
 
       await this._dismissOverlays(page);
-      await this._screenshot(page, 'diary-filled');
+      await page.waitForSelector(SELECTORS.title, { timeout: 10000 });
 
-      // === 送信（リトライあり） ===
-      const submitResult = await this._submitForm(page, diaryUrl);
-      return submitResult;
+      // === 4. 絵文字リトライ付き投稿 ===
+      const hasEmoji = this._hasUnicodeEmojis(diary.title) || this._hasUnicodeEmojis(diary.body);
+      const strategies = hasEmoji ? [
+        { name: 'そのまま（絵文字あり）', title: diary.title, body: diary.body },
+        { name: '安全な記号に置換', title: this._replaceEmojisWithSafe(diary.title), body: this._replaceEmojisWithSafe(diary.body) },
+        { name: '絵文字除去', title: this._stripUnicodeEmojis(diary.title), body: this._stripUnicodeEmojis(diary.body) },
+      ] : [
+        { name: '通常', title: diary.title, body: diary.body },
+      ];
+
+      for (let si = 0; si < strategies.length; si++) {
+        const strategy = strategies[si];
+        const title = strategy.title.substring(0, 20);
+        const body = strategy.body;
+
+        if (strategies.length > 1) {
+          console.log(`  ✏️ 投稿試行[${si + 1}/${strategies.length}]: ${strategy.name}`);
+        }
+
+        // フォームにタイトル・本文を設定
+        await this._fillForm(page, title, body);
+        console.log(`  ✏️ タイトル: "${title}"`);
+
+        // 入力確認
+        const fieldCheck = await page.evaluate((sel) => {
+          const titleEl = document.querySelector('#diaryTitle');
+          let bodyLen = 0;
+          const editorName = sel.replace('#', '');
+          if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorName]) {
+            bodyLen = CKEDITOR.instances[editorName].getData().length;
+          } else {
+            const bodyEl = document.querySelector(sel);
+            bodyLen = bodyEl?.value?.length || 0;
+          }
+          return { titleLen: titleEl?.value?.length || 0, bodyLen };
+        }, SELECTORS.body);
+        console.log(`  ✏️ 本文: ${fieldCheck.bodyLen}文字（タイトル${fieldCheck.titleLen}文字）`);
+
+        if (fieldCheck.bodyLen === 0) {
+          throw new Error('本文の入力に失敗しました（0文字）');
+        }
+
+        await this._screenshot(page, `diary-filled-${si}`);
+
+        // 送信試行
+        const submitResult = await this._submitForm(page, diaryUrl);
+
+        if (submitResult.success) {
+          if (si > 0) {
+            console.log(`  ℹ️ 「${strategy.name}」で投稿成功`);
+            submitResult.emojiStrategy = strategy.name;
+          }
+          return submitResult;
+        }
+
+        // バリデーションエラー以外は即失敗（投稿ボタンが無い等）
+        if (!submitResult.validationError) {
+          return submitResult;
+        }
+
+        // 次のリトライがある場合
+        if (si < strategies.length - 1) {
+          console.log(`  ⚠️ バリデーションエラー。次の絵文字戦略「${strategies[si + 1].name}」を試します...`);
+          await this._wait(2000);
+          // AJAXベースなのでフォームはまだ残っている。再入力するだけでOK
+        }
+      }
+
+      return { success: false, error: '全ての絵文字戦略で投稿に失敗しました' };
 
     } catch (e) {
       await this._screenshot(page, 'post-error');
@@ -343,7 +391,7 @@ class CityHavenPoster {
     if (previewText.match(/エラー|入力してください|文字以上/) && !previewText.includes('日記を投稿する')) {
       console.log(`  ❌ バリデーションエラー`);
       await this._screenshot(page, 'validation-error');
-      return { success: false, error: 'フォームのバリデーションエラー' };
+      return { success: false, error: 'フォームのバリデーションエラー', validationError: true };
     }
 
     // === STEP 2: 「投稿」ボタンを探してクリック ===
