@@ -1179,5 +1179,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "10件送信（スキップ34人）"
+  },
+  {
+    "id": "1771863616641",
+    "date": "2026-02-23",
+    "timestamp": "2026-02-23T16:20:16.641Z",
+    "accountId": "mitene_1770957652292",
+    "accountName": "りぼん",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信（スキップ53人）"
   }
 ]
