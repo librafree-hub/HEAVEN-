@@ -49,7 +49,7 @@ class Scheduler {
     return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
   }
 
-  async postForAccount(account) {
+  async postForAccount(account, options = {}) {
     const timestamp = new Date().toLocaleTimeString('ja-JP');
     console.log(`\n⏰ [${timestamp}] 投稿処理開始: ${account.name}`);
 
@@ -62,7 +62,7 @@ class Scheduler {
       console.log(`  選択画像: ${image.name}`);
 
       console.log(`  🤖 AI日記生成中...`);
-      const diary = await aiGenerator.generateDiary(account, image.path);
+      const diary = await aiGenerator.generateDiary(account, image.path, options.category);
       console.log(`  生成完了: ${diary.charCount}文字 | タイトル: ${diary.title}`);
 
       const settings = this._loadSettings();
@@ -151,11 +151,11 @@ class Scheduler {
     return { results };
   }
 
-  async runSingle(accountId) {
+  async runSingle(accountId, options = {}) {
     const accounts = this._loadAccounts();
     const account = accounts.find(a => a.id === accountId);
     if (!account) return { error: `アカウントが見つかりません: ${accountId}` };
-    return this.postForAccount(account);
+    return this.postForAccount(account, options);
   }
 
   start() {

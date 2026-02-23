@@ -88,6 +88,42 @@
           <div id="diary-accounts-list">読み込み中...</div>
         </div>
 
+        <!-- 手動投稿 -->
+        <div class="card">
+          <h3>手動投稿</h3>
+          <p style="font-size:13px; color:#888; margin-bottom:12px;">タイトルと本文を入力して直接投稿（AI生成なし）</p>
+          <div class="form-group">
+            <label>アカウント</label>
+            <select id="manual-account"></select>
+          </div>
+          <div class="form-group">
+            <label>タイトル（20文字以内）</label>
+            <input type="text" id="manual-title" maxlength="20" placeholder="タイトルを入力">
+          </div>
+          <div class="form-group">
+            <label>本文</label>
+            <textarea id="manual-body" rows="8" placeholder="本文を入力"></textarea>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>投稿方法</label>
+              <select id="manual-postType">
+                <option value="diary">写メ日記</option>
+                <option value="freepost">フリーポスト</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>公開範囲</label>
+              <select id="manual-visibility">
+                <option value="public">全公開</option>
+                <option value="mygirl">マイガール限定</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-manual-post" onclick="App.manualPost()">手動投稿する</button>
+          <span id="manual-post-status" style="margin-left:12px; font-size:13px;"></span>
+        </div>
+
         <!-- 投稿履歴 -->
         <div class="card">
           <h3>投稿履歴</h3>

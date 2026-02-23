@@ -135,8 +135,20 @@ class AIGenerator {
     return [];
   }
 
+  // --- カテゴリ別の指示 ---
+  _getCategoryInstruction(category) {
+    const categories = {
+      'syukkin': '【日記カテゴリ: 出勤日記】\n今日の出勤報告です。今日の意気込み、お客さんに会えるのが楽しみという気持ち、今日のコーデやメイクについて触れてください。',
+      'taikin': '【日記カテゴリ: 退勤日記】\n今日の退勤報告です。今日一日の感想、お客さんへの感謝、疲れたけど楽しかった等の内容にしてください。',
+      'orei': '【日記カテゴリ: お礼日記】\n来てくれたお客さんへのお礼日記です。具体的な名前は出さず、「今日来てくれた方」「先日のお兄さん」等のぼかした表現で、楽しかった・嬉しかったという気持ちを書いてください。',
+      'zatsudan': '【日記カテゴリ: 雑談日記】\n日常の雑談日記です。趣味、食べ物、お出かけ、最近ハマっていること等、仕事以外のプライベートな内容を中心に書いてください。',
+      'event': '【日記カテゴリ: イベント日記】\nイベントや季節の話題の日記です。季節のイベント、お店のイベント、記念日など、特別な出来事について書いてください。',
+    };
+    return categories[category] || '';
+  }
+
   // --- メイン生成 ---
-  async generateDiary(account, imagePath) {
+  async generateDiary(account, imagePath, category = null) {
     const settings = this._loadSettings();
     const minChars = settings.minChars || 450;
     const maxChars = settings.maxChars || 1000;
@@ -150,6 +162,11 @@ class AIGenerator {
       sampleSection = `\n【過去の日記サンプル（この文体・口調・雰囲気を真似てください）】\n${picked.map((s, i) => `--- サンプル${i + 1} ---\n${s}`).join('\n\n')}\n\n★重要: 上記サンプルの文体、口調、絵文字の使い方、改行の入れ方、言い回しを忠実に真似てください。サンプルの内容をそのままコピーせず、同じ雰囲気で新しい内容を書いてください。\n`;
     }
 
+    const categoryInstruction = this._getCategoryInstruction(category);
+    if (category) {
+      console.log(`  📂 カテゴリ: ${category}`);
+    }
+
     const prompt = `あなたは風俗店で働く「${account.name}」というキャストです。
 以下のキャラクター設定に基づいて、シティヘブンの写メ日記を書いてください。
 
@@ -159,11 +176,12 @@ class AIGenerator {
 - 口調: ${account.tone || '設定なし'}
 - 趣味・興味: ${(account.interests || []).join('、') || '設定なし'}
 - 文体: ${account.writingStyle || '設定なし'}
+${categoryInstruction}
 ${sampleSection}
 【ルール】
 - ${minChars}〜${maxChars}文字で書く
 - 自然な日記風の文章にする
-- 絵文字を適度に使う
+- 絵文字を適度に使う（ただしUnicode絵文字は使わず、♪♡★☆等の記号絵文字を使う）
 - お客さんへの呼びかけを入れる
 - 写真も一緒に投稿するので、写真を撮ったことや自撮りに軽く触れる内容を自然に含める
 - 宣伝っぽくならないようにする
