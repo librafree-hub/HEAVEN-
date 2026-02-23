@@ -154,7 +154,8 @@ class CityHavenPoster {
       console.log(`  🔒 公開範囲: ${visibility === 'mygirl' ? 'マイガール限定' : '全公開'}`);
       await this._wait(500);
 
-      // 3. タイトル入力
+      // 3. タイトル入力（絵文字を除去）
+      const cleanTitle = diary.title.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, '').trim();
       await page.waitForSelector(SELECTORS.title, { timeout: 10000 });
       await page.evaluate((sel, text) => {
         const el = document.querySelector(sel);
@@ -164,30 +165,57 @@ class CityHavenPoster {
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      }, SELECTORS.title, diary.title);
-      console.log(`  ✏️ タイトル: "${diary.title}"`);
+      }, SELECTORS.title, cleanTitle);
+      console.log(`  ✏️ タイトル: "${cleanTitle}"`);
 
-      // 4. 本文入力
+      // 4. 本文入力（CKEditor対応 + 絵文字除去）
+      const cleanBody = diary.body.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{200D}\u{20E3}]/gu, '').trim();
       await page.waitForSelector(SELECTORS.body, { timeout: 10000 });
-      await page.evaluate((sel, text) => {
+
+      // CKEditorが使われているかチェックし、適切な方法で入力
+      const bodySet = await page.evaluate((sel, text) => {
+        // CKEditor経由で入力（最優先）
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances) {
+          const editorName = sel.replace('#', '');
+          const editor = CKEDITOR.instances[editorName];
+          if (editor) {
+            editor.setData(text);
+            return 'ckeditor';
+          }
+          // 名前が違う場合、最初のインスタンスを使う
+          const keys = Object.keys(CKEDITOR.instances);
+          if (keys.length > 0) {
+            CKEDITOR.instances[keys[0]].setData(text);
+            return 'ckeditor-first';
+          }
+        }
+        // CKEditorなしの場合は直接入力
         const el = document.querySelector(sel);
         if (el) {
           el.focus();
           el.value = text;
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
-          el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' }));
-          el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a' }));
+          return 'textarea';
         }
-      }, SELECTORS.body, diary.body);
+        return 'failed';
+      }, SELECTORS.body, cleanBody);
+      console.log(`  ✏️ 本文入力方法: ${bodySet}`);
       await this._wait(1000);
 
-      // 入力確認
-      const fieldCheck = await page.evaluate(() => {
+      // 入力確認（CKEditorの場合はgetDataで確認）
+      const fieldCheck = await page.evaluate((sel) => {
         const title = document.querySelector('#diaryTitle');
-        const body = document.querySelector('#diary');
-        return { titleLen: title?.value?.length || 0, bodyLen: body?.value?.length || 0 };
-      });
+        let bodyLen = 0;
+        const editorName = sel.replace('#', '');
+        if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances && CKEDITOR.instances[editorName]) {
+          bodyLen = CKEDITOR.instances[editorName].getData().length;
+        } else {
+          const body = document.querySelector(sel);
+          bodyLen = body?.value?.length || 0;
+        }
+        return { titleLen: title?.value?.length || 0, bodyLen };
+      }, SELECTORS.body);
       console.log(`  ✏️ 本文: ${fieldCheck.bodyLen}文字（タイトル${fieldCheck.titleLen}文字）`);
 
       if (fieldCheck.bodyLen === 0) {
@@ -200,19 +228,30 @@ class CityHavenPoster {
         if (fileInput) {
           await fileInput.uploadFile(imagePath);
           console.log(`  📸 画像アップロード開始`);
-          // アップロード完了を待つ（「アップロード中」テキストが消えるまで最大30秒）
-          for (let i = 0; i < 30; i++) {
+          // アップロード完了を待つ（最大15秒）
+          // 「アップロード中」テキストが消えるか、サムネイルが表示されるまで待つ
+          for (let i = 0; i < 15; i++) {
             await this._wait(1000);
-            const stillUploading = await page.evaluate(() => {
-              const els = Array.from(document.querySelectorAll('a, span, div'));
-              return els.some(el => (el.textContent || '').trim() === 'アップロード中');
+            const uploadStatus = await page.evaluate(() => {
+              // サムネイル画像が表示されたら完了
+              const thumbs = document.querySelectorAll('img[src*="thumb"], img[src*="upload"], .preview img, .thumbnail img');
+              if (thumbs.length > 0) return 'done';
+              // テキストでチェック
+              const pageText = document.body.innerText;
+              if (pageText.includes('アップロード中')) return 'uploading';
+              return 'unknown';
             });
-            if (!stillUploading) {
+            if (uploadStatus === 'done') {
               console.log(`  📸 画像アップロード完了（${i + 1}秒）`);
               break;
             }
-            if (i === 29) {
-              console.log(`  ⚠️ 画像アップロードがタイムアウト（30秒）`);
+            if (uploadStatus !== 'uploading' && i >= 5) {
+              // 5秒以上待ってアップロード中でもないなら完了とみなす
+              console.log(`  📸 画像アップロード完了（${i + 1}秒、ステータス: ${uploadStatus}）`);
+              break;
+            }
+            if (i === 14) {
+              console.log(`  ⚠️ 画像アップロード待機終了（15秒）- 続行します`);
             }
           }
         }
