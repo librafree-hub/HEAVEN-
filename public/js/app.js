@@ -57,12 +57,28 @@ const App = {
             / ${a.postsPerDay}回/日
           </span>
           <span class="mitene-account-status" id="diary-acc-status-${a.id}"></span>
+          <select id="diary-cat-${a.id}" style="font-size:12px; padding:2px 4px; border-radius:4px;">
+            <option value="">自動（ランダム）</option>
+            <option value="syukkin">出勤日記</option>
+            <option value="taikin">退勤日記</option>
+            <option value="orei">お礼日記</option>
+            <option value="zatsudan">雑談日記</option>
+            <option value="event">イベント日記</option>
+          </select>
           <button class="btn btn-sm btn-primary" id="diary-btn-${a.id}" onclick="App.postSingle('${a.id}')">投稿</button>
           <button class="btn btn-sm btn-secondary" onclick="App.showImages('${a.id}', '${this.esc(a.name)}')">画像</button>
           <button class="btn btn-sm btn-secondary" onclick="App.editAccount('${a.id}')">編集</button>
           <button class="btn btn-sm btn-danger" onclick="App.deleteAccount('${a.id}', '${this.esc(a.name)}')">削除</button>
         </div>
       `).join('');
+    }
+
+    // 手動投稿のアカウント選択肢を更新
+    const manualAccSel = document.getElementById('manual-account');
+    if (manualAccSel) {
+      manualAccSel.innerHTML = accounts.map(a =>
+        `<option value="${a.id}">${this.esc(a.name)}</option>`
+      ).join('');
     }
 
     const posts = await this.api('/posts?limit=200');
@@ -230,10 +246,13 @@ const App = {
 
     const btn = document.getElementById(`diary-btn-${accountId}`);
     const statusEl = document.getElementById(`diary-acc-status-${accountId}`);
+    const catSel = document.getElementById(`diary-cat-${accountId}`);
+    const category = catSel?.value || null;
+
     if (btn) { btn.disabled = true; btn.textContent = '投稿中...'; }
     if (statusEl) { statusEl.textContent = '処理中...'; statusEl.className = 'mitene-account-status sending'; }
 
-    const result = await this.api(`/post/${accountId}`, 'POST');
+    const result = await this.api(`/post/${accountId}`, 'POST', { category });
 
     if (btn) { btn.disabled = false; btn.textContent = '投稿'; }
 
@@ -252,6 +271,39 @@ const App = {
       historyEl.innerHTML = this.renderPostsTable(diaryPosts);
     }
     await this.updateDiaryPanel();
+  },
+
+  // === 手動投稿 ===
+  async manualPost() {
+    const accountId = document.getElementById('manual-account').value;
+    const title = document.getElementById('manual-title').value.trim();
+    const body = document.getElementById('manual-body').value.trim();
+    const postType = document.getElementById('manual-postType').value;
+    const visibility = document.getElementById('manual-visibility').value;
+
+    if (!accountId) { alert('アカウントを選択してください'); return; }
+    if (!title) { alert('タイトルを入力してください'); return; }
+    if (!body) { alert('本文を入力してください'); return; }
+    if (!confirm('この内容で投稿しますか？')) return;
+
+    const btn = document.getElementById('btn-manual-post');
+    const statusEl = document.getElementById('manual-post-status');
+    btn.disabled = true; btn.textContent = '投稿中...';
+    statusEl.textContent = '処理中...'; statusEl.style.color = '#888';
+
+    const result = await this.api(`/post/${accountId}/manual`, 'POST', { title, body, postType, visibility });
+
+    btn.disabled = false; btn.textContent = '手動投稿する';
+
+    if (result.success) {
+      statusEl.textContent = '投稿成功!'; statusEl.style.color = '#6f6';
+      document.getElementById('manual-title').value = '';
+      document.getElementById('manual-body').value = '';
+    } else {
+      statusEl.textContent = `失敗: ${result.error || '不明なエラー'}`; statusEl.style.color = '#f66';
+    }
+
+    await this.loadDiary();
   },
 
   // =============================================

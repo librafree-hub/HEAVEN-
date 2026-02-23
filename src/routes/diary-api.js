@@ -183,8 +183,49 @@ router.post('/post/all', async (req, res) => {
 });
 
 router.post('/post/:accountId', async (req, res) => {
-  const result = await scheduler.runSingle(req.params.accountId);
+  const category = req.body.category || null;
+  const result = await scheduler.runSingle(req.params.accountId, { category });
   res.json(result);
+});
+
+// 手動投稿（タイトル・本文を指定して投稿のみ）
+router.post('/post/:accountId/manual', async (req, res) => {
+  const { title, body } = req.body;
+  if (!title || !body) {
+    return res.status(400).json({ error: 'タイトルと本文を入力してください' });
+  }
+
+  const accounts = loadAccounts();
+  const account = accounts.find(a => a.id === req.params.accountId);
+  if (!account) return res.status(404).json({ error: 'アカウントが見つかりません' });
+
+  try {
+    const poster = require('../services/cityhaven-poster');
+    const imageManager2 = require('../services/image-manager');
+    const image = imageManager2.selectImage(account.id);
+
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+    const postOptions = {
+      postType: req.body.postType || account.postType || settings.postType || 'diary',
+      visibility: req.body.visibility || account.visibility || settings.visibility || 'public'
+    };
+
+    console.log(`\n📝 手動投稿: ${account.name} [${postOptions.postType} / ${postOptions.visibility}]`);
+    const result = await poster.post(account, { title, body }, image?.path, postOptions);
+
+    database.addPost({
+      accountId: account.id, accountName: account.name,
+      title, body, charCount: body.length,
+      image: image?.name || '',
+      postType: postOptions.postType, visibility: postOptions.visibility,
+      status: result.success ? 'success' : 'failed',
+      message: result.error || '手動投稿'
+    });
+
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // === 写メ日記 スケジューラー ===
