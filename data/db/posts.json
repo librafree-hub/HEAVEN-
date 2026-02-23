@@ -1123,5 +1123,19 @@
     "visibility": "public",
     "status": "success",
     "message": ""
+  },
+  {
+    "id": "1771858718718",
+    "date": "2026-02-23",
+    "timestamp": "2026-02-23T14:58:38.718Z",
+    "accountId": "mitene_1771041477092",
+    "accountName": "あめ",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "全タブ確認済み・全員2週間以内に送信済みのためスキップ（135人）"
   }
 ]
