@@ -1655,5 +1655,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "10件送信（スキップ26人）"
+  },
+  {
+    "id": "1772139273575",
+    "date": "2026-02-26",
+    "timestamp": "2026-02-26T20:54:33.575Z",
+    "accountId": "mitene_1770957816261",
+    "accountName": "まりい",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "全タブ確認済み・全員2週間以内に送信済みのためスキップ（134人）"
   }
 ]
