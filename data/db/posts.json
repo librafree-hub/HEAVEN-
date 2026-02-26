@@ -1627,5 +1627,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "本日分のミテネは使い切り済み"
+  },
+  {
+    "id": "1772137982962",
+    "date": "2026-02-26",
+    "timestamp": "2026-02-26T20:33:02.962Z",
+    "accountId": "mitene_1770751444616",
+    "accountName": "いちご",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "failed",
+    "message": "Attempted to use detached Frame '54EE6A913EFD08BA2946D0895163CD52'."
   }
 ]
