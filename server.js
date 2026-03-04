@@ -40,9 +40,9 @@ app.use('/api', diaryRoutes);
 // API（ミテネ）
 app.use('/api/mitene', miteneRoutes);
 
-// ミテネページ
+// ミテネページ（統合済み：メインページにリダイレクト）
 app.get('/mitene', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'mitene.html'));
+  res.redirect('/');
 });
 
 // ダッシュボードのフォールバック
@@ -57,8 +57,7 @@ function startServer() {
     console.log('═══════════════════════════════════════════');
     console.log('  HEAVEN - 自動化システム');
     console.log('═══════════════════════════════════════════');
-    console.log(`  写メ日記:   http://localhost:${PORT}`);
-    console.log(`  ミテネ:     http://localhost:${PORT}/mitene`);
+    console.log(`  ダッシュボード: http://localhost:${PORT}`);
     console.log('═══════════════════════════════════════════');
     console.log('');
 
