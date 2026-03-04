@@ -1907,5 +1907,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "10件送信（スキップ102人）"
+  },
+  {
+    "id": "1772657748965",
+    "date": "2026-03-04",
+    "timestamp": "2026-03-04T20:55:48.965Z",
+    "accountId": "mitene_1770957695370",
+    "accountName": "るな",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "failed",
+    "message": "Attempted to use detached Frame '2D10731765753B758D4688E78B887870'."
   }
 ]
