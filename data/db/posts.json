@@ -1935,5 +1935,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "本日分のミテネは使い切り済み"
+  },
+  {
+    "id": "1772658551615",
+    "date": "2026-03-04",
+    "timestamp": "2026-03-04T21:09:11.615Z",
+    "accountId": "mitene_1771041569065",
+    "accountName": "いお",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信（スキップ15人）"
   }
 ]
