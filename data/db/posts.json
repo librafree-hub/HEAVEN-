@@ -2187,5 +2187,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "10件送信"
+  },
+  {
+    "id": "1772812216253",
+    "date": "2026-03-06",
+    "timestamp": "2026-03-06T15:50:16.253Z",
+    "accountId": "mitene_1770751444616",
+    "accountName": "いちご",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信"
   }
 ]
