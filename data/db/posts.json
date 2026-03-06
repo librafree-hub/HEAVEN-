@@ -2383,5 +2383,19 @@
     "postType": "mitene",
     "status": "success",
     "message": "10件送信（スキップ1人）"
+  },
+  {
+    "id": "1772820760441",
+    "date": "2026-03-06",
+    "timestamp": "2026-03-06T18:12:40.441Z",
+    "accountId": "mitene_1770957596316",
+    "accountName": "ひめか",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "本日分のミテネは使い切り済み"
   }
 ]
