@@ -2159,5 +2159,19 @@
     "postType": "mitene",
     "status": "failed",
     "message": "Attempted to use detached Frame 'A13A0E489EDBC8D74D291A147DE75449'."
+  },
+  {
+    "id": "1772809498288",
+    "date": "2026-03-06",
+    "timestamp": "2026-03-06T15:04:58.288Z",
+    "accountId": "mitene_1771041604150",
+    "accountName": "うらら",
+    "title": "ミテネ送信",
+    "body": "",
+    "charCount": 0,
+    "image": "",
+    "postType": "mitene",
+    "status": "success",
+    "message": "10件送信（スキップ11人）"
   }
 ]
