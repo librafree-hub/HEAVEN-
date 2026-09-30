@@ -89,6 +89,13 @@ class MiteneScheduler {
     try {
       const result = await miteneSender.send(account, settings);
 
+      // 履歴で、その子の上限（20回・50回など）を読み取れたか分かるようにする
+      const quota = result.limit ? `（上限${result.limit}回）`
+        : result.remainingBefore != null ? `（開始時の残り${result.remainingBefore}回）`
+        : result.count > 0 ? '（残り回数読み取れず）' : '';
+      const aborted = result.abortReason ? `（${result.abortReason}で中断）` : '';
+      const sentSummary = `${result.count || 0}件送信${quota}${result.skipped ? `（スキップ${result.skipped}人）` : ''}${aborted}`;
+
       database.addPost({
         accountId: account.id,
         accountName: account.name,
@@ -98,7 +105,7 @@ class MiteneScheduler {
         image: '',
         postType: 'mitene',
         status: result.success ? 'success' : 'failed',
-        message: result.message || (result.success ? `${result.count || 0}件送信${result.skipped ? `（スキップ${result.skipped}人）` : ''}` : (result.error || '不明なエラー'))
+        message: result.message || (result.success ? sentSummary : (result.error || '不明なエラー'))
       });
 
       this.accountStatus[accountId] = {
@@ -110,7 +117,7 @@ class MiteneScheduler {
       if (result.message) {
         console.log(`  ℹ️ ${account.name}: ${result.message}`);
       } else if (result.success) {
-        console.log(`  ✅ ${account.name}: ミテネ送信成功 (${result.count}件${result.skipped ? ` / スキップ${result.skipped}人` : ''})`);
+        console.log(`  ✅ ${account.name}: ミテネ送信成功 ${sentSummary}`);
       } else {
         console.log(`  ❌ ${account.name}: ミテネ送信失敗 - ${result.error || '不明なエラー'}`);
       }

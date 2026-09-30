@@ -4,6 +4,10 @@ const fs = require('fs');
 
 const SCREENSHOT_DIR = path.join(__dirname, '../../data/logs');
 const IS_CLOUD = process.env.HEADLESS === 'true';
+// この回数続けて送信に失敗したら、上限到達やログイン切れとみなして打ち切る
+const MAX_CONSECUTIVE_FAILURES = 3;
+// 課金・購入系の確認ダイアログは自動でOKしない
+const PURCHASE_DIALOG = /購入|課金|有料/;
 
 class MiteneSender {
   constructor() {
@@ -136,18 +140,40 @@ class MiteneSender {
     return false;
   }
 
-  // 残り回数を読み取る
+  // 残り回数を読み取る（total = その子の1日の上限。20回・50回など子によって違う）
   async _getRemainingCount(page) {
     const remaining = await page.evaluate(() => {
-      const text = document.body.innerText;
-      // 「残り回数: 10/10」「残り回数：8/10」などのパターン
-      const match = text.match(/残り回数[：:]\s*(\d+)\s*[/／]\s*(\d+)/);
+      // 全角数字（２０など）も読めるように半角へ変換
+      const text = document.body.innerText.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+      // 「残り回数: 10/10」「残り回数：8/10」「残り回数 20回/50回」などのパターン
+      const match = text.match(/残り回数[：:\s]*(\d+)\s*回?\s*[/／]\s*(\d+)/);
       if (match) {
         return { remaining: parseInt(match[1]), total: parseInt(match[2]) };
+      }
+      // 上限の表示がなく「残り回数：18」だけの場合
+      const onlyRemaining = text.match(/残り回数[：:\s]*(\d+)/);
+      if (onlyRemaining) {
+        return { remaining: parseInt(onlyRemaining[1]), total: null };
+      }
+      if (text.includes('使い切りました')) {
+        return { remaining: 0, total: null };
       }
       return null;
     });
     return remaining;
+  }
+
+  // 残り回数が読めなかった時の調査用: 回数らしき行をログに出す
+  async _logRemainingHints(page) {
+    const lines = await page.evaluate(() =>
+      document.body.innerText.split('\n').map(l => l.trim()).filter(l => /残り|回数|上限/.test(l)).slice(0, 5)
+    ).catch(() => []);
+    if (lines.length === 0) {
+      console.log(`  🔍 ページ内に「残り・回数・上限」を含む行が見つかりません`);
+    }
+    for (const line of lines) {
+      console.log(`  🔍 候補: ${line.substring(0, 80)}`);
+    }
   }
 
   // タブに遷移してボタンが表示されるまで待つ
@@ -188,8 +214,17 @@ class MiteneSender {
     let errorCount = 0;
     let skipCount = 0;
     let tabExhausted = false; // このタブの全員がスキップ/処理済み
+    let limitReached = false; // その子の残り回数を使い切った
+    let consecutiveFailures = 0;
+    let abortReason = null;
+    let lastRemaining = null;
 
     for (let attempt = 0; attempt < maxSends * 3 && sentCount < maxSends; attempt++) {
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        abortReason = `連続${consecutiveFailures}回失敗`;
+        console.log(`  🛑 ${abortReason}。上限到達やログイン切れの可能性があるため打ち切ります`);
+        break;
+      }
       try {
         const buttons = await page.$$('a.kitene_send_btn__text_wrapper, a.mitene_send_btn__text_wrapper, a[onclick*="registComeon"]');
 
@@ -317,6 +352,7 @@ class MiteneSender {
           await clickedButton.click();
         } catch (clickErr) {
           console.log(`  ⚠️ クリック失敗（要素が消えた？）: ${clickErr.message}`);
+          consecutiveFailures++;
           page.off('dialog', dialogTracker);
           try {
             await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -328,8 +364,21 @@ class MiteneSender {
 
         page.off('dialog', dialogTracker);
 
+        if (PURCHASE_DIALOG.test(lastDialogMessage)) {
+          abortReason = '購入確認ダイアログ';
+          console.log(`  🛑 購入確認ダイアログが出たため打ち切ります（OKは押していません）: ${lastDialogMessage}`);
+          break;
+        }
+
+        if (/上限に達|使い切|残り回数がありません/.test(lastDialogMessage)) {
+          console.log(`  🏁 送信上限に到達: ${lastDialogMessage}`);
+          limitReached = true;
+          break;
+        }
+
         if (lastDialogMessage.includes('エラー')) {
           errorCount++;
+          consecutiveFailures++;
           console.log(`  ❌ 送信失敗: ${lastDialogMessage}`);
           try {
             await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -351,19 +400,23 @@ class MiteneSender {
         }
 
         sentCount++;
+        consecutiveFailures = 0;
         console.log(`  ✅ ミテネ送信 ${sentCount}/${maxSends}`);
 
         const afterCount = await this._getRemainingCount(page);
         if (afterCount) {
-          console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total}`);
+          lastRemaining = afterCount.remaining;
+          console.log(`  📊 残り回数: ${afterCount.remaining}/${afterCount.total ?? '?'}`);
           if (afterCount.remaining === 0) {
             console.log(`  🏁 残り回数0。`);
+            limitReached = true;
             break;
           }
         }
       } catch (e) {
         console.log(`  ⚠️ 送信エラー: ${e.message}`);
         errorCount++;
+        consecutiveFailures++;
         try {
           await page.goto(memberListUrl, { waitUntil: 'networkidle2', timeout: 60000 });
           await this._wait(3000);
@@ -374,7 +427,7 @@ class MiteneSender {
       }
     }
 
-    return { sentCount, errorCount, skipCount, tabExhausted };
+    return { sentCount, errorCount, skipCount, tabExhausted, limitReached, abortReason, lastRemaining };
   }
 
   // ステップ3: 全タブを順番に確認してキテネ送信
@@ -410,7 +463,7 @@ class MiteneSender {
       await this._navigateToTab(page, firstTabUrl, tabOptions[0].name);
     }
 
-    // 残り回数を確認
+    // 残り回数を確認（その子の1日の上限＝20回・50回などもここで分かる）
     let countInfo = null;
     for (let retry = 0; retry < 3; retry++) {
       countInfo = await this._getRemainingCount(page);
@@ -419,20 +472,26 @@ class MiteneSender {
       await this._wait(3000);
     }
     if (countInfo) {
-      console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total}`);
+      console.log(`  📊 残り回数: ${countInfo.remaining}/${countInfo.total ?? '?'}（この子の1日の上限: ${countInfo.total ?? '表示なし'}）`);
       if (countInfo.remaining === 0) {
-        console.log(`  ⚠️ 残り回数が0です。送信できません。`);
-        return { success: false, count: 0, error: '残り回数が0です' };
+        console.log(`  ⏭️ 残り回数が0です。本日分は使い切り済み。`);
+        return { success: true, count: 0, skipped: 0, limit: countInfo.total, message: '本日分のミテネは使い切り済み（残り回数0）' };
       }
       if (countInfo.remaining < maxSends) {
         maxSends = countInfo.remaining;
         console.log(`  📊 残り回数に合わせて最大${maxSends}件に調整`);
       }
+    } else {
+      console.log(`  ⚠️ 残り回数を読み取れませんでした → 設定の最大${maxSends}件で実行（上限到達・連続失敗で自動停止）`);
+      await this._logRemainingHints(page);
+      await this._screenshot(page, 'mitene-remaining-unreadable');
     }
 
     let totalSent = 0;
     let totalErrors = 0;
     let totalSkipped = 0;
+    let remainingAfter = null;
+    let abortReason = null;
     const triedUids = new Set();
 
     // 各タブを順番に試す
@@ -459,6 +518,17 @@ class MiteneSender {
       totalSent = result.sentCount;
       totalErrors += result.errorCount;
       totalSkipped += result.skipCount;
+      if (result.lastRemaining !== null) remainingAfter = result.lastRemaining;
+
+      // 使い切った・打ち切った場合は残りのタブも回らない
+      if (result.limitReached) {
+        console.log(`  🏁 この子の残り回数を使い切りました（${totalSent}件送信）`);
+        break;
+      }
+      if (result.abortReason) {
+        abortReason = result.abortReason;
+        break;
+      }
 
       if (totalSent >= maxSends) {
         console.log(`  🏁 最大送信数到達（${totalSent}/${maxSends}）`);
@@ -476,19 +546,24 @@ class MiteneSender {
     console.log(`  📊 全タブ確認完了: 送信${totalSent}件 / スキップ${totalSkipped}人 / エラー${totalErrors}件`);
 
     await this._screenshot(page, 'mitene-after-send');
-    const allSkipped = totalSent === 0 && totalSkipped > 0 && totalErrors === 0;
+    const allSkipped = totalSent === 0 && totalSkipped > 0 && totalErrors === 0 && !abortReason;
     return {
       success: totalSent > 0 || allSkipped,
       count: totalSent,
       errors: totalErrors,
       skipped: totalSkipped,
+      limit: countInfo ? countInfo.total : null,
+      remainingBefore: countInfo ? countInfo.remaining : null,
+      remainingAfter,
+      abortReason,
+      error: abortReason ? `${abortReason}で中断` : undefined,
       message: allSkipped ? `全タブ確認済み・全員${minWeeks}週間以内に送信済みのためスキップ（${totalSkipped}人）` : undefined
     };
   }
 
   // メイン処理
   async send(account, settings = {}) {
-    const maxSends = settings.miteneMaxSends || 10;
+    const maxSends = settings.miteneMaxSends || 50;
     const minWeeks = settings.miteneMinWeeks || 0;
 
     let page = null;
@@ -499,11 +574,15 @@ class MiteneSender {
       // ダイアログ自動承認（「キテネしますか？」「ミテネしますか？」にOKを押す）
       page.on('dialog', async dialog => {
         console.log(`  💬 ダイアログ: ${dialog.message()}`);
+        if (PURCHASE_DIALOG.test(dialog.message())) {
+          await dialog.dismiss();
+          return;
+        }
         await dialog.accept();
       });
 
       console.log(`\n👋 ミテネ送信開始: ${account.name}`);
-      console.log(`  設定: 最大${maxSends}件送信, ${minWeeks > 0 ? minWeeks + '週間以上経過した人のみ' : '制限なし'}`);
+      console.log(`  設定: 最大${maxSends}件送信（その子の残り回数が少なければそこまで）, ${minWeeks > 0 ? minWeeks + '週間以上経過した人のみ' : '制限なし'}`);
 
       // ステップ1: ログイン
       const loggedIn = await this._login(page, account);

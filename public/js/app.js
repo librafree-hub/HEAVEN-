@@ -760,7 +760,7 @@ const App = {
 
     // ミテネの設定
     const miteneSettings = await this.miteneApi('/settings');
-    document.getElementById('set-miteneMaxSends').value = miteneSettings.miteneMaxSends || 10;
+    document.getElementById('set-miteneMaxSends').value = miteneSettings.miteneMaxSends || 50;
     document.getElementById('set-miteneMinWeeks').value = miteneSettings.miteneMinWeeks || 0;
   },
 
@@ -787,7 +787,7 @@ const App = {
 
     // ミテネ設定を保存
     const miteneData = {
-      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 10,
+      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 50,
       miteneMinWeeks: parseInt(document.getElementById('set-miteneMinWeeks').value) || 0
     };
     await this.miteneApi('/settings', 'PUT', miteneData);

@@ -214,11 +214,11 @@ router.get('/settings', (req, res) => {
     if (fs.existsSync(SETTINGS_PATH)) {
       const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
       res.json({
-        miteneMaxSends: settings.miteneMaxSends || 10,
+        miteneMaxSends: settings.miteneMaxSends || 50,
         miteneMinWeeks: settings.miteneMinWeeks || 0
       });
     } else {
-      res.json({ miteneMaxSends: 10, miteneMinWeeks: 0 });
+      res.json({ miteneMaxSends: 50, miteneMinWeeks: 0 });
     }
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -260,7 +260,7 @@ router.get('/settings', (req, res) => {
       res.json({
         minChars: 450, maxChars: 1000,
         postingEnabled: false, schedule: '0 */3 8-23 * * *',
-        miteneMaxSends: 10, miteneMinWeeks: 0
+        miteneMaxSends: 50, miteneMinWeeks: 0
       });
     }
   } catch (e) {

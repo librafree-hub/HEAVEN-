@@ -306,14 +306,14 @@ const App = {
   // =============================================
   async loadSettings() {
     const settings = await this.api('/settings');
-    document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 10;
+    document.getElementById('set-miteneMaxSends').value = settings.miteneMaxSends || 50;
     document.getElementById('set-miteneMinWeeks').value = settings.miteneMinWeeks || 0;
   },
 
   async saveSettings(e) {
     e.preventDefault();
     const data = {
-      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 10,
+      miteneMaxSends: parseInt(document.getElementById('set-miteneMaxSends').value) || 50,
       miteneMinWeeks: parseInt(document.getElementById('set-miteneMinWeeks').value) || 0
     };
     await this.api('/settings', 'PUT', data);
